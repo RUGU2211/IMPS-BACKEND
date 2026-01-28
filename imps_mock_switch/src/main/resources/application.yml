@@ -1,0 +1,51 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: imps-mock-switch
+
+  # ===========================================
+  # DATABASE CONFIGURATION - imps_db (shared with IMPS Backend)
+  # ===========================================
+  datasource:
+    url: jdbc:postgresql://localhost:5432/imps_db
+    username: postgres
+    password: root
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ===========================================
+# IMPS BACKEND ROUTING (to send responses)
+# ===========================================
+imps:
+  backend:
+    base-url: http://localhost:8081
+    endpoints:
+      resppay: /switch/resppay/2.1
+      respchktxn: /switch/respchktxn/2.1
+      resphbt: /switch/resphbt/2.1
+      resplistaccpvd: /switch/resplistaccpvd/2.1
+      respvaladd: /switch/respvaladd/2.1
+
+# ===========================================
+# MOCK SWITCH CONFIGURATION
+# ===========================================
+mock:
+  # Auto-respond: automatically send response after receiving request (ON)
+  auto-respond: true
+  # Manual trigger: set to true to enable /trigger/* endpoints (OFF = use auto-reply only)
+  trigger:
+    enabled: false
+  # Response delay in milliseconds (simulate processing time)
+  response-delay-ms: 500
+  # Default response result
+  default-result: SUCCESS

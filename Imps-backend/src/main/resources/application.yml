@@ -1,0 +1,64 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/imps_db
+    username: postgres
+    password: root
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+server:
+  port: 8081
+
+# ===========================================
+# ROUTING CONFIGURATION
+# ===========================================
+routing:
+  # NPCI Side - XML Format (Mock Client on port 8083)
+  npci:
+    base-url: http://localhost:8083
+    endpoints:
+      # Request endpoints (NPCI sends requests here)
+      reqpay: /npci/reqpay/2.1
+      reqchktxn: /npci/reqchktxn/2.1
+      reqhbt: /npci/reqhbt/2.1
+      reqlistaccpvd: /npci/reqlistaccpvd/2.1
+      reqvaladd: /npci/reqvaladd/2.1
+      # Response endpoints (App sends responses here)
+      resppay: /npci/resppay/2.1
+      respchktxn: /npci/respchktxn/2.1
+      resphbt: /npci/resphbt/2.1
+      resplistaccpvd: /npci/resplistaccpvd/2.1
+      respvaladd: /npci/respvaladd/2.1
+
+  # Switch Side - ISO Format (Mock Switch on port 8082)
+  switch:
+    base-url: http://localhost:8082
+    endpoints:
+      # Request endpoints (App sends ISO requests here)
+      reqpay: /switch/reqpay/2.1
+      reqchktxn: /switch/reqchktxn/2.1
+      reqhbt: /switch/reqhbt/2.1
+      reqlistaccpvd: /switch/reqlistaccpvd/2.1
+      reqvaladd: /switch/reqvaladd/2.1
+      # Response endpoints (Switch sends ISO responses here)
+      resppay: /switch/resppay/2.1
+      respchktxn: /switch/respchktxn/2.1
+      resphbt: /switch/resphbt/2.1
+      resplistaccpvd: /switch/resplistaccpvd/2.1
+      respvaladd: /switch/respvaladd/2.1
+
+# ===========================================
+# API VERSION
+# ===========================================
+imps:
+  api:
+    version: "2.1"
+  org-id: "BANK01"
