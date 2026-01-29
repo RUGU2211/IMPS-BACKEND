@@ -62,3 +62,10 @@ imps:
   api:
     version: "2.1"
   org-id: "BANK01"
+
+  # Heartbeat Rule: System must generate heartbeat messages every 3 minutes.
+  # If no response is received, NPCI may mark the bank BIN down and block outward traffic.
+  heartbeat:
+    enabled: true
+    interval-ms: 180000   # 3 minutes
+    initial-delay-ms: 15000   # First heartbeat 15 seconds after startup
