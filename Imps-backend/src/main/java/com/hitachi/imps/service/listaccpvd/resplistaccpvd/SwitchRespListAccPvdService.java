@@ -1,12 +1,15 @@
 package com.hitachi.imps.service.listaccpvd.resplistaccpvd;
 
+import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.client.NpciMockClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
+import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.service.audit.MessageAuditService;
+import com.hitachi.imps.util.IsoUtil;
 
 /**
  * Service for handling RespListAccPvd responses from Switch.
@@ -33,8 +36,9 @@ public class SwitchRespListAccPvdService {
     public void process(byte[] isoBytes) {
         String txnId = "SWITCH_LISTACCPVD_RESP_" + System.currentTimeMillis();
 
-        // 1. Audit incoming ISO (as Base64 for binary safety)
-        auditService.saveRawBytes(txnId, "SWITCH_RESPLISTACCPVD_ISO_IN", isoBytes);
+        // 1. Unpack ISO and audit in same format as SWITCH_*_ISO_OUT (MTI + DE fields, not Base64)
+        ISOMsg iso = IsoUtil.unpack(isoBytes, new ImpsIsoPackager());
+        auditService.saveParsed(txnId, "SWITCH_RESPLISTACCPVD_ISO_IN", iso);
 
         System.out.println("=== Processing Switch RespListAccPvd ===");
         System.out.println("ISO bytes length: " + isoBytes.length);

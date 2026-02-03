@@ -4,12 +4,10 @@ import com.hitachi.mockswitch.entity.AuditLog;
 import com.hitachi.mockswitch.entity.AuditLog.Direction;
 import com.hitachi.mockswitch.entity.AuditLog.ProcessingStatus;
 import com.hitachi.mockswitch.repository.AuditLogRepository;
-import com.hitachi.mockswitch.service.MessageAuditService;
 import org.jpos.iso.ISOException;
 import org.jpos.iso.ISOMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,11 +28,7 @@ public class AuditService {
     private static final Logger log = LoggerFactory.getLogger(AuditService.class);
 
     private final AuditLogRepository auditLogRepository;
-    
-    @Autowired
-    private MessageAuditService messageAuditService;
 
-    @Autowired
     public AuditService(AuditLogRepository auditLogRepository) {
         this.auditLogRepository = auditLogRepository;
     }
@@ -82,20 +76,7 @@ public class AuditService {
         auditLog.setProcessingTimeMs(System.currentTimeMillis() - startTime);
         
         AuditLog saved = auditLogRepository.save(auditLog);
-        
-        // Also log to message_audit_log (shared table)
-        try {
-            String txnId = isoMsg != null && isoMsg.hasField(120) 
-                ? isoMsg.getString(120) 
-                : "SWITCH_" + System.currentTimeMillis();
-            messageAuditService.saveRawBytes(txnId, "SWITCH_" + apiType + "_ISO_IN", isoBytes);
-            if (isoMsg != null) {
-                messageAuditService.saveParsed(txnId, "SWITCH_" + apiType + "_ISO_PARSED", isoMsg);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to log to message_audit_log: {}", e.getMessage());
-        }
-        
+        // message_audit_log is written only by Imps-backend (4 stages per flow)
         return saved;
     }
 

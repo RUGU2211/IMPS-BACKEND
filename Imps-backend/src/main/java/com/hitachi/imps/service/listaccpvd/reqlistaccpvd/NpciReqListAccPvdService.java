@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.hitachi.imps.client.NpciMockClient;
 import com.hitachi.imps.entity.InstitutionMaster;
@@ -40,6 +41,7 @@ public class NpciReqListAccPvdService {
         }
     }
 
+    @Transactional
     public void process(String xml) {
         String msgId = xmlParsingService.extractMsgId(xml);
         String txnId = xmlParsingService.extractTxnId(xml);

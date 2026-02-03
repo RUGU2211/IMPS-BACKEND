@@ -67,8 +67,8 @@ public class SwitchRespPayService {
                 ? originalTxnId 
                 : "SWITCH_RESP_" + System.currentTimeMillis();
 
-        // 2. Audit incoming ISO
-        auditService.saveRawBytes(txnId, "SWITCH_RESPPAY_ISO_IN", isoBytes);
+        // 2. Audit incoming ISO in same parsed format as SWITCH_*_ISO_OUT (MTI + DE fields, not Base64)
+        auditService.saveParsed(txnId, "SWITCH_RESPPAY_ISO_IN", iso);
 
         System.out.println("=== Processing Switch RespPay ===");
         System.out.println("ISO bytes length: " + isoBytes.length);

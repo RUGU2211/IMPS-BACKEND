@@ -63,8 +63,8 @@ public class SwitchRespChkTxnService {
                 ? originalTxnId
                 : "SWITCH_CHKTXN_RESP_" + System.currentTimeMillis();
 
-        // 2. Audit incoming ISO (as Base64 for binary safety)
-        auditService.saveRawBytes(txnId, "SWITCH_RESPCHKTXN_ISO_IN", isoBytes);
+        // 2. Audit incoming ISO in same format as SWITCH_*_ISO_OUT (MTI + DE fields, not Base64)
+        auditService.saveParsed(txnId, "SWITCH_RESPCHKTXN_ISO_IN", iso);
 
         System.out.println("=== Processing Switch RespChkTxn ===");
         System.out.println("ISO bytes length: " + isoBytes.length);

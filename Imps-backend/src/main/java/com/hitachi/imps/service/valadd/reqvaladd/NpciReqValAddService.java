@@ -8,6 +8,7 @@ import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.hitachi.imps.client.NpciMockClient;
 import com.hitachi.imps.client.SwitchClient;
@@ -45,8 +46,13 @@ public class NpciReqValAddService {
         }
     }
 
+    @Transactional
     public void process(String xml) {
         String msgId = xmlParsingService.extractMsgId(xml);
+        String txnId = xmlParsingService.extractTxnId(xml);
+        if (txnId == null || txnId.isBlank()) {
+            txnId = msgId;
+        }
 
         // 1. Audit incoming XML
         auditService.saveRaw(msgId, "NPCI_REQVALADD_XML_IN", xml);
@@ -74,17 +80,14 @@ public class NpciReqValAddService {
                 .orElse(null);
 
             if (acc != null) {
-                // Found locally - send success response (account_master used for validation)
+                // Found locally - create txn row and mark SUCCESS so transaction table is updated
+                TransactionEntity txn = transactionService.createRequest(txnId, xml, "VALADD");
                 respXml = buildSuccessResponse(msgId, acc.getAccountHolderName(), acNum, ifsc);
-                System.out.println("=== Account Found Locally ===");
+                transactionService.markSuccess(txn, respXml, null, null);
+                System.out.println("=== Account Found Locally (txn updated) ===");
             } else {
                 // Not found locally - forward to Switch
                 System.out.println("=== Account Not Found Locally - Forwarding to Switch ===");
-                // Use Txn @id so it matches DE120 in Switch response (for DB lookup)
-                String txnId = xmlParsingService.extractTxnId(xml);
-                if (txnId == null || txnId.isBlank()) {
-                    txnId = msgId;
-                }
                 TransactionEntity txn = transactionService.createRequest(txnId, xml, "VALADD");
                 ISOMsg iso = xmlToIsoConverter.convertReqValAdd(xml);
                 auditService.saveParsed(msgId, "SWITCH_REQVALADD_ISO_OUT", iso);
@@ -94,8 +97,10 @@ public class NpciReqValAddService {
                 return; // Response will come from Switch
             }
         } else {
-            // Invalid request
+            // Invalid request - create txn and mark FAILED so transaction table is updated
+            TransactionEntity txn = transactionService.createRequest(txnId, xml, "VALADD");
             respXml = buildFailureResponse(msgId, "14", "Invalid Account Details");
+            transactionService.markFailure(txn, respXml);
         }
 
         // 4. Send response to NPCI Mock Client (optional - won't fail if not running)
