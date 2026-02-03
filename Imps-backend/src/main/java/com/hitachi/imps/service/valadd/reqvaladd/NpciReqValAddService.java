@@ -65,16 +65,17 @@ public class NpciReqValAddService {
         String respXml;
         if (acNum != null && ifsc != null) {
             AccountMaster acc = accountRepo
-                .findByAccountNumberAndIfscCodeAndStatus(
+                .findByAccountNumberAndIfscCodeAndAccountStatusAndImpsEnabled(
                     acNum.trim(),
                     ifsc.trim().toUpperCase(),
-                    "ACTIVE"
+                    "ACTIVE",
+                    "Y"
                 )
                 .orElse(null);
 
             if (acc != null) {
-                // Found locally - send success response
-                respXml = buildSuccessResponse(msgId, acc.getAccountName(), acNum, ifsc);
+                // Found locally - send success response (account_master used for validation)
+                respXml = buildSuccessResponse(msgId, acc.getAccountHolderName(), acNum, ifsc);
                 System.out.println("=== Account Found Locally ===");
             } else {
                 // Not found locally - forward to Switch

@@ -11,6 +11,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.hitachi.mockswitch.entity.AuditLog.ProcessingStatus;
 import com.hitachi.mockswitch.iso.MockIsoPackager;
+import com.hitachi.mockswitch.service.AccountLedgerService;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,9 +37,8 @@ public class MockResponseService {
     @Autowired
     private AuditService auditService;
 
-    /** For manual mode: store last request DE120 so manual trigger can echo it (same as auto). */
     @Autowired
-    private LastRequestContext lastRequestContext;
+    private AccountLedgerService accountLedgerService;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final MockIsoPackager packager = new MockIsoPackager();
@@ -86,7 +86,9 @@ public class MockResponseService {
             // Parse request
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return;
-            if (reqIso.hasField(120)) lastRequestContext.setLastReqPayDe120(reqIso.getString(120));
+
+            // Debit payer and credit payee in account_master; get response code
+            String responseCode = accountLedgerService.debitAndCredit(reqIso);
 
             // Build response
             ISOMsg respIso = new ISOMsg();
@@ -108,7 +110,7 @@ public class MockResponseService {
             respIso.set(12, LocalDateTime.now().format(TIME_FORMAT));
             respIso.set(13, LocalDateTime.now().format(DATE_FORMAT));
             respIso.set(38, generateApprovalNumber()); // Approval number
-            respIso.set(39, "00"); // Response code: SUCCESS
+            respIso.set(39, responseCode); // 00=success, 51=insufficient funds, 14=invalid account, 96=error
 
             // Send to IMPS Backend with audit
             sendToBackendWithAudit(respIso, "/switch/resppay/2.1", "RESPPAY", inboundAuditId);
@@ -129,7 +131,6 @@ public class MockResponseService {
 
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return;
-            if (reqIso.hasField(120)) lastRequestContext.setLastReqChkTxnDe120(reqIso.getString(120));
 
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
@@ -165,7 +166,6 @@ public class MockResponseService {
 
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return;
-            if (reqIso.hasField(120)) lastRequestContext.setLastReqHbtDe120(reqIso.getString(120));
 
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
@@ -200,7 +200,6 @@ public class MockResponseService {
 
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return;
-            if (reqIso.hasField(120)) lastRequestContext.setLastReqValAddDe120(reqIso.getString(120));
 
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
@@ -240,7 +239,6 @@ public class MockResponseService {
 
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return;
-            if (reqIso.hasField(120)) lastRequestContext.setLastReqListAccPvdDe120(reqIso.getString(120));
 
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);

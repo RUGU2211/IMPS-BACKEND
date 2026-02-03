@@ -37,14 +37,11 @@ imps:
       respvaladd: /switch/respvaladd/2.1
 
 # ===========================================
-# MOCK SWITCH CONFIGURATION
+# MOCK SWITCH CONFIGURATION (auto-response only)
 # ===========================================
 mock:
-  # Auto-respond: automatically send response after receiving request (ON)
+  # Auto-respond: automatically send response after receiving request
   auto-respond: true
-  # Manual trigger: set to true to enable /trigger/* endpoints (OFF = use auto-reply only)
-  trigger:
-    enabled: false
   # Response delay in milliseconds (simulate processing time)
   response-delay-ms: 500
   # Default response result

@@ -54,12 +54,12 @@ public class ValidationService {
             // 1. Validate Payee Account (Account Master)
             if (payeeAccount != null && payeeIfsc != null) {
                 Optional<AccountMaster> payeeAccountOpt = accountMasterRepository
-                    .findByAccountNumberAndIfscCodeAndStatus(payeeAccount, payeeIfsc, "ACTIVE");
+                    .findByAccountNumberAndIfscCodeAndAccountStatusAndImpsEnabled(payeeAccount, payeeIfsc, "ACTIVE", "Y");
                 
                 if (payeeAccountOpt.isPresent()) {
                     AccountMaster account = payeeAccountOpt.get();
-                    System.out.println("✓ Payee Account Valid: " + account.getAccountName());
-                    result.addValidation("PAYEE_ACCOUNT", "VALID", account.getAccountName());
+                    System.out.println("✓ Payee Account Valid: " + account.getAccountHolderName());
+                    result.addValidation("PAYEE_ACCOUNT", "VALID", account.getAccountHolderName());
                 } else {
                     System.out.println("✗ Payee Account Not Found or Inactive");
                     result.setValid(false);

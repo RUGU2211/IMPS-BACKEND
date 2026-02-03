@@ -76,16 +76,11 @@ public class NpciReqPayService {
         transactionService.markIsoSent(txn);
         byte[] response = switchClient.sendReqPay(iso);
 
-        if (response != null) {
-            System.out.println("=== Switch Response Received ===");
-            System.out.println("Response length: " + response.length + " bytes");
-            
-            // 7. Audit switch response
-            auditService.saveRawBytes(msgId, "SWITCH_RESPPAY_ISO_IN", response);
-        } else {
+        if (response == null) {
             System.out.println("=== No Response from Switch ===");
             transactionService.markFailure(txn, null);
         }
+        // Audit: only 4 entries per flow. SWITCH_RESPPAY_ISO_IN and NPCI_RESPPAY_XML_OUT are logged in SwitchRespPayService when Switch posts response to /resppay
     }
 
     private void printIso(ISOMsg iso) {

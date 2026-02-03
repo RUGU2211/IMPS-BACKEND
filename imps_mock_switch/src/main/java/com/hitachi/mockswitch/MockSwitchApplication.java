@@ -30,7 +30,6 @@ public class MockSwitchApplication {
         System.out.println("-------------------------------------------");
         System.out.println("*** AUTO-REPLY MODE ***");
         System.out.println("Requests are auto-responded (RespPay/RespChkTxn/RespHbt/RespValAdd/RespListAccPvd).");
-        System.out.println("Trigger (/trigger/*) is DISABLED. Set mock.trigger.enabled=true to enable.");
         System.out.println("===========================================");
         System.out.println("Switch Endpoints: application/octet-stream or application/xml");
         System.out.println("Database: imps_db (audit_log table)");

@@ -116,11 +116,11 @@ public class TransactionValidationService {
                 
                 if (payeeAccount != null && payeeIfsc != null) {
                     Optional<AccountMaster> accountOpt = accountMasterRepository
-                        .findByAccountNumberAndIfscCodeAndStatus(payeeAccount, payeeIfsc, "ACTIVE");
+                        .findByAccountNumberAndIfscCodeAndAccountStatusAndImpsEnabled(payeeAccount, payeeIfsc, "ACTIVE", "Y");
                     
                     if (accountOpt.isPresent()) {
-                        System.out.println("✓ Payee Account Valid: " + accountOpt.get().getAccountName());
-                        result.addValidation("PAYEE_ACCOUNT", "VALID", accountOpt.get().getAccountName());
+                        System.out.println("✓ Payee Account Valid: " + accountOpt.get().getAccountHolderName());
+                        result.addValidation("PAYEE_ACCOUNT", "VALID", accountOpt.get().getAccountHolderName());
                     } else {
                         System.out.println("⚠ Payee Account Not Found: " + payeeAccount + "@" + payeeIfsc);
                         result.addValidation("PAYEE_ACCOUNT", "NOT_FOUND", payeeAccount + "@" + payeeIfsc);
@@ -130,13 +130,13 @@ public class TransactionValidationService {
                 System.out.println("⚠ Could not validate payee account: " + e.getMessage());
             }
 
-            // 6. Validate Institution (if available)
+            // 6. Validate Institution via institution_master (IMPS validation table)
             if (payeeIfsc != null) {
                 Optional<InstitutionMaster> institutionOpt = institutionMasterRepository
                     .findByIfscCode(payeeIfsc);
                 
-                if (institutionOpt.isPresent() && institutionOpt.get().getActive()) {
-                    System.out.println("✓ Institution Valid: " + institutionOpt.get().getName());
+                if (institutionOpt.isPresent() && Boolean.TRUE.equals(institutionOpt.get().getActive())) {
+                    System.out.println("✓ Institution Valid (institution_master): " + institutionOpt.get().getName());
                     result.addValidation("INSTITUTION", "VALID", institutionOpt.get().getName());
                 } else {
                     System.out.println("⚠ Institution Not Found or Inactive: " + payeeIfsc);
