@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.entity.TransactionEntity;
+import com.hitachi.imps.exception.DuplicateTxnIdException;
 import com.hitachi.imps.repository.TransactionRepository;
 
 @Service
@@ -29,6 +30,20 @@ public class TransactionService {
 
     private String now() {
         return LocalDateTime.now().format(FMT);
+    }
+
+    /**
+     * Validate that txn_id does not already exist in public.transaction.
+     * @throws DuplicateTxnIdException if txn_id already exists
+     */
+    public void validateNewTxnId(String txnId) {
+        if (txnId != null && !txnId.isBlank() && repo.existsByTxnId(txnId)) {
+            throw new DuplicateTxnIdException(txnId);
+        }
+    }
+
+    public boolean existsByTxnId(String txnId) {
+        return txnId != null && !txnId.isBlank() && repo.existsByTxnId(txnId);
     }
 
     /* ===============================

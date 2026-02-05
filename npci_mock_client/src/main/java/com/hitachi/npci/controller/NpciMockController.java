@@ -7,8 +7,9 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * NPCI Mock Controller
- * 
+ *
  * Receives XML messages from IMPS Backend and sends ACK responses.
+ * Also receives ACK from IMPS (when request lands in IMPS) and logs to console.
  * Simulates NPCI behavior for testing.
  */
 @RestController
@@ -16,193 +17,185 @@ import jakarta.servlet.http.HttpServletRequest;
 public class NpciMockController {
 
     /* ===============================
-       REQPAY - Payment Request
+       ACK FROM IMPS - Log to console
+       (IMPS sends ACK here so it is visible in NPCI Mock console)
        =============================== */
     @PostMapping(
-        value = "/reqpay/2.1",
+        value = "/ack",
         consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
+        produces = MediaType.TEXT_PLAIN_VALUE
     )
-    public String handleReqPay(@RequestBody String xml, HttpServletRequest request) {
-        System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: REQPAY RECEIVED");
+    public String handleAckFromImps(@RequestBody String ackXml, HttpServletRequest request) {
+        System.out.println("\n###########################################");
+        System.out.println("  ACK RECEIVED FROM IMPS (request landed, processing)");
         System.out.println("  From: " + request.getRemoteAddr());
-        System.out.println("===========================================");
-        System.out.println(xml);
-        System.out.println("===========================================\n");
-
-        return buildAck("ReqPay", extractMsgId(xml));
+        System.out.println("###########################################");
+        System.out.println(ackXml);
+        System.out.println("###########################################\n");
+        return "OK";
     }
 
     /* ===============================
-       RESPPAY - Payment Response
+       REQPAY - Payment Request (dynamic path only: /reqpay/{txnId})
        =============================== */
     @PostMapping(
-        value = "/resppay/2.1",
+        value = "/reqpay/{txnId}",
         consumes = MediaType.APPLICATION_XML_VALUE,
         produces = MediaType.APPLICATION_XML_VALUE
     )
-    public String handleRespPay(@RequestBody String xml, HttpServletRequest request) {
+    public String handleReqPay(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: RESPPAY RECEIVED");
+        System.out.println("  NPCI MOCK: REQPAY RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
 
-        return buildAck("RespPay", extractMsgId(xml));
+        String ack = buildAck("ReqPay", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:");
+        System.out.println(ack);
+        System.out.println("===========================================\n");
+        return ack;
     }
 
     /* ===============================
-       REQCHKTXN - Check Transaction
+       RESPPAY - Payment Response (dynamic: IMPS → NPCI at /npci/resppay/{txnId})
        =============================== */
-    @PostMapping(
-        value = "/reqchktxn/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqChkTxn(@RequestBody String xml, HttpServletRequest request) {
+    @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespPay(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: REQCHKTXN RECEIVED");
+        System.out.println("  NPCI MOCK: RESPPAY RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
-
-        return buildAck("ReqChkTxn", extractMsgId(xml));
+        String ack = buildAck("RespPay", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:\n" + ack + "\n===========================================\n");
+        return ack;
     }
 
     /* ===============================
-       RESPCHKTXN - Check Transaction Response
+       REQCHKTXN - Check Transaction (dynamic path only: /reqchktxn/{txnId})
        =============================== */
     @PostMapping(
-        value = "/respchktxn/2.1",
+        value = "/reqchktxn/{txnId}",
         consumes = MediaType.APPLICATION_XML_VALUE,
         produces = MediaType.APPLICATION_XML_VALUE
     )
-    public String handleRespChkTxn(@RequestBody String xml, HttpServletRequest request) {
+    public String handleReqChkTxn(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: RESPCHKTXN RECEIVED");
+        System.out.println("  NPCI MOCK: REQCHKTXN RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
 
-        return buildAck("RespChkTxn", extractMsgId(xml));
+        String ack = buildAck("ReqChkTxn", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:");
+        System.out.println(ack);
+        System.out.println("===========================================\n");
+        return ack;
+    }
+
+    @PostMapping(value = "/respchktxn/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespChkTxn(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
+        System.out.println("\n===========================================\n  NPCI MOCK: RESPCHKTXN RECEIVED txnId=" + txnId + "\n  From: " + request.getRemoteAddr() + "\n===========================================\n" + xml + "\n===========================================\n");
+        String ack = buildAck("RespChkTxn", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:\n" + ack + "\n===========================================\n");
+        return ack;
     }
 
     /* ===============================
-       REQHBT - Heartbeat Request
+       REQHBT - Heartbeat Request (dynamic path only: /reqhbt/{txnId})
        =============================== */
     @PostMapping(
-        value = "/reqhbt/2.1",
+        value = "/reqhbt/{txnId}",
         consumes = MediaType.APPLICATION_XML_VALUE,
         produces = MediaType.APPLICATION_XML_VALUE
     )
-    public String handleReqHbt(@RequestBody String xml, HttpServletRequest request) {
+    public String handleReqHbt(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: REQHBT RECEIVED");
+        System.out.println("  NPCI MOCK: REQHBT RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
 
-        return buildAck("ReqHbt", extractMsgId(xml));
+        String ack = buildAck("ReqHbt", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:");
+        System.out.println(ack);
+        System.out.println("===========================================\n");
+        return ack;
+    }
+
+    @PostMapping(value = "/resphbt/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespHbt(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
+        System.out.println("\n===========================================\n  NPCI MOCK: RESPHBT RECEIVED txnId=" + txnId + "\n  From: " + request.getRemoteAddr() + "\n===========================================\n" + xml + "\n===========================================\n");
+        String ack = buildAck("RespHbt", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:\n" + ack + "\n===========================================\n");
+        return ack;
     }
 
     /* ===============================
-       RESPHBT - Heartbeat Response
+       REQLISTACCPVD - List Account Providers (dynamic path only: /reqlistaccpvd/{txnId})
        =============================== */
     @PostMapping(
-        value = "/resphbt/2.1",
+        value = "/reqlistaccpvd/{txnId}",
         consumes = MediaType.APPLICATION_XML_VALUE,
         produces = MediaType.APPLICATION_XML_VALUE
     )
-    public String handleRespHbt(@RequestBody String xml, HttpServletRequest request) {
+    public String handleReqListAccPvd(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: RESPHBT RECEIVED");
+        System.out.println("  NPCI MOCK: REQLISTACCPVD RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
 
-        return buildAck("RespHbt", extractMsgId(xml));
+        String ack = buildAck("ReqListAccPvd", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:");
+        System.out.println(ack);
+        System.out.println("===========================================\n");
+        return ack;
+    }
+
+    @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespListAccPvd(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
+        System.out.println("\n===========================================\n  NPCI MOCK: RESPLISTACCPVD RECEIVED txnId=" + txnId + "\n  From: " + request.getRemoteAddr() + "\n===========================================\n" + xml + "\n===========================================\n");
+        String ack = buildAck("RespListAccPvd", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:\n" + ack + "\n===========================================\n");
+        return ack;
     }
 
     /* ===============================
-       REQLISTACCPVD - List Account Providers
+       REQVALADD - Account Validation Request (dynamic path only: /reqvaladd/{txnId})
        =============================== */
     @PostMapping(
-        value = "/reqlistaccpvd/2.1",
+        value = "/reqvaladd/{txnId}",
         consumes = MediaType.APPLICATION_XML_VALUE,
         produces = MediaType.APPLICATION_XML_VALUE
     )
-    public String handleReqListAccPvd(@RequestBody String xml, HttpServletRequest request) {
+    public String handleReqValAdd(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: REQLISTACCPVD RECEIVED");
+        System.out.println("  NPCI MOCK: REQVALADD RECEIVED txnId=" + txnId);
         System.out.println("  From: " + request.getRemoteAddr());
         System.out.println("===========================================");
         System.out.println(xml);
         System.out.println("===========================================\n");
 
-        return buildAck("ReqListAccPvd", extractMsgId(xml));
+        String ack = buildAck("ReqValAdd", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:");
+        System.out.println(ack);
+        System.out.println("===========================================\n");
+        return ack;
     }
 
-    /* ===============================
-       RESPLISTACCPVD - List Account Providers Response
-       =============================== */
-    @PostMapping(
-        value = "/resplistaccpvd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespListAccPvd(@RequestBody String xml, HttpServletRequest request) {
-        System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: RESPLISTACCPVD RECEIVED");
-        System.out.println("  From: " + request.getRemoteAddr());
-        System.out.println("===========================================");
-        System.out.println(xml);
-        System.out.println("===========================================\n");
-
-        return buildAck("RespListAccPvd", extractMsgId(xml));
-    }
-
-    /* ===============================
-       REQVALADD - Account Validation Request
-       =============================== */
-    @PostMapping(
-        value = "/reqvaladd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqValAdd(@RequestBody String xml, HttpServletRequest request) {
-        System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: REQVALADD RECEIVED");
-        System.out.println("  From: " + request.getRemoteAddr());
-        System.out.println("===========================================");
-        System.out.println(xml);
-        System.out.println("===========================================\n");
-
-        return buildAck("ReqValAdd", extractMsgId(xml));
-    }
-
-    /* ===============================
-       RESPVALADD - Account Validation Response
-       =============================== */
-    @PostMapping(
-        value = "/respvaladd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespValAdd(@RequestBody String xml, HttpServletRequest request) {
-        System.out.println("\n===========================================");
-        System.out.println("  NPCI MOCK: RESPVALADD RECEIVED");
-        System.out.println("  From: " + request.getRemoteAddr());
-        System.out.println("===========================================");
-        System.out.println(xml);
-        System.out.println("===========================================\n");
-
-        return buildAck("RespValAdd", extractMsgId(xml));
+    @PostMapping(value = "/respvaladd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespValAdd(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
+        System.out.println("\n===========================================\n  NPCI MOCK: RESPVALADD RECEIVED txnId=" + txnId + "\n  From: " + request.getRemoteAddr() + "\n===========================================\n" + xml + "\n===========================================\n");
+        String ack = buildAck("RespValAdd", extractMsgId(xml));
+        System.out.println("  ACK SENT TO IMPS:\n" + ack + "\n===========================================\n");
+        return ack;
     }
 
     /* ===============================

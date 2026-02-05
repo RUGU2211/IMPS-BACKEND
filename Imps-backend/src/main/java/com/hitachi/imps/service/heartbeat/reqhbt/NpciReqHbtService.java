@@ -36,7 +36,17 @@ public class NpciReqHbtService {
     @Async
     public void processAsync(String xml) {
         try {
-            process(xml);
+            process(xml, null);
+        } catch (Exception e) {
+            System.err.println("NpciReqHbtService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId) {
+        try {
+            process(xml, pathTxnId);
         } catch (Exception e) {
             System.err.println("NpciReqHbtService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -44,15 +54,19 @@ public class NpciReqHbtService {
     }
 
     public void process(String xml) {
+        process(xml, null);
+    }
+
+    public void process(String xml, String pathTxnId) {
         String msgId = xmlParsingService.extractMsgId(xml);
-        String txnId = xmlParsingService.extractTxnId(xml);
+        String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
+        if (txnId == null || txnId.isBlank()) txnId = msgId;
 
         // 1. Audit incoming XML
         auditService.saveRaw(msgId, "NPCI_REQHBT_XML_IN", xml);
 
         // 2. Create transaction record (txn_type = HBT, switch_status = INIT)
-        TransactionEntity txn = transactionService.createRequest(
-            txnId != null && !txnId.isBlank() ? txnId : msgId, xml, "HBT");
+        TransactionEntity txn = transactionService.createRequest(txnId, xml, "HBT");
 
         System.out.println("=== Processing NPCI ReqHbt ===");
         System.out.println("MsgId: " + msgId + ", TxnId: " + txnId);
@@ -91,7 +105,10 @@ public class NpciReqHbtService {
         printIso(iso);
 
         transactionService.markIsoSent(txn);
-        switchClient.sendReqHbt(iso);
+        System.out.println("reqhbt/" + txnId + " send to switch");
+        byte[] response = switchClient.sendReqHbt(iso, txnId);
+        if (response != null)
+            System.out.println("switch ack receive of reqhbt/" + txnId);
     }
 
     private String buildRespHbt(String reqMsgId, String txnId, String note, String refId, String txnTs) {
@@ -112,7 +129,7 @@ public class NpciReqHbtService {
             </upi:RespHbt>
             """.formatted(
                 OffsetDateTime.now(),
-                UUID.randomUUID().toString().replace("-", "").substring(0, 20),
+                "RSP" + UUID.randomUUID().toString().replace("-", "").substring(0, 32), // Rule 021: 35 chars
                 txnId != null ? txnId : "",
                 note != null ? note : "",
                 refId != null ? refId : "",

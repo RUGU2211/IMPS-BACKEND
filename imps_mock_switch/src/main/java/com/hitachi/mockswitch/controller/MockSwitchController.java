@@ -64,185 +64,60 @@ public class MockSwitchController {
     }
 
     /* ===============================
-       REQPAY - Fund Transfer Request
-       Accepts: application/octet-stream (ISO) or application/xml (converted to ISO)
+       REQ* endpoints: dynamic only in ImpsSwitchMockController (/switch/reqpay/{txnId}, etc.)
+       No static /2.1 — each request must use a unique txn_id in the path.
        =============================== */
-    @PostMapping(
-        value = "/reqpay/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqPay(@RequestBody byte[] body, HttpServletRequest request) {
-        byte[] isoBytes = resolveBody(body, request.getContentType(), "REQPAY");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: REQPAY RECEIVED");
-        System.out.println("  " + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML (converted to ISO)" : "ISO") + " Length: " + isoBytes.length + " bytes");
-        System.out.println("===========================================");
 
-        ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQPAY");
-        if (isoMsg != null) {
-            ValidationService.ValidationResult validationResult = validationService.validateReqPay(isoMsg);
-            System.out.println("Validation Result: " + (validationResult.isValid() ? "VALID" : "INVALID"));
-            if (!validationResult.isValid()) System.out.println("Validation Errors: " + validationResult.getValidations());
-        }
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        AuditLog audit = auditService.logInboundRequest(isoBytes, isoMsg, "REQPAY", sourceEndpoint);
-        // Auto-reply: send RespPay back to IMPS Backend (DE120 echoed so transaction can be updated)
-        responseService.sendRespPayAsync(isoBytes, audit != null ? audit.getId() : null);
-        return buildAck("ReqPay");
-    }
-
-    @PostMapping(
-        value = "/reqchktxn/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqChkTxn(@RequestBody byte[] body, HttpServletRequest request) {
-        byte[] isoBytes = resolveBody(body, request.getContentType(), "REQCHKTXN");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: REQCHKTXN RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
-        ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQCHKTXN");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        AuditLog audit = auditService.logInboundRequest(isoBytes, isoMsg, "REQCHKTXN", sourceEndpoint);
-        responseService.sendRespChkTxnAsync(isoBytes, audit != null ? audit.getId() : null);
-        return buildAck("ReqChkTxn");
-    }
-
-    @PostMapping(
-        value = "/reqhbt/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqHbt(@RequestBody byte[] body, HttpServletRequest request) {
-        byte[] isoBytes = resolveBody(body, request.getContentType(), "REQHBT");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: REQHBT RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
-        ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQHBT");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        AuditLog audit = auditService.logInboundRequest(isoBytes, isoMsg, "REQHBT", sourceEndpoint);
-        responseService.sendRespHbtAsync(isoBytes, audit != null ? audit.getId() : null);
-        return buildAck("ReqHbt");
-    }
-
-    @PostMapping(
-        value = "/reqvaladd/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqValAdd(@RequestBody byte[] body, HttpServletRequest request) {
-        byte[] isoBytes = resolveBody(body, request.getContentType(), "REQVALADD");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: REQVALADD RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
-        ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQVALADD");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        AuditLog audit = auditService.logInboundRequest(isoBytes, isoMsg, "REQVALADD", sourceEndpoint);
-        responseService.sendRespValAddAsync(isoBytes, audit != null ? audit.getId() : null);
-        return buildAck("ReqValAdd");
-    }
-
-    @PostMapping(
-        value = "/reqlistaccpvd/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleReqListAccPvd(@RequestBody byte[] body, HttpServletRequest request) {
-        byte[] isoBytes = resolveBody(body, request.getContentType(), "REQLISTACCPVD");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: REQLISTACCPVD RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
-        ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQLISTACCPVD");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        AuditLog audit = auditService.logInboundRequest(isoBytes, isoMsg, "REQLISTACCPVD", sourceEndpoint);
-        responseService.sendRespListAccPvdAsync(isoBytes, audit != null ? audit.getId() : null);
-        return buildAck("ReqListAccPvd");
-    }
-
-    /* RESPPAY - Accepts ISO or XML; if XML converts to ISO and forwards to IMPS Backend */
-    @PostMapping(
-        value = "/resppay/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespPay(@RequestBody byte[] body, HttpServletRequest request) {
+    /* RESPPAY - Dynamic path only: /switch/resppay/{txnId}. Forwards to IMPS with same txnId. */
+    @PostMapping(value = "/resppay/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespPay(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPPAY");
         System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: RESPPAY RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
+        System.out.println("  MOCK SWITCH: RESPPAY RECEIVED txnId=" + txnId);
         System.out.println("===========================================");
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "RESPPAY");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        auditService.logInboundRequest(isoBytes, isoMsg, "RESPPAY", sourceEndpoint);
-        responseService.forwardIsoToBackend(isoBytes, "/switch/resppay/2.1", "RESPPAY");
+        auditService.logInboundRequest(isoBytes, isoMsg, "RESPPAY", request.getRemoteAddr() + ":" + request.getRemotePort());
+        responseService.forwardIsoToBackend(isoBytes, "/switch/resppay/" + txnId, "RESPPAY");
         return buildAck("RespPay");
     }
 
-    @PostMapping(
-        value = "/respchktxn/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespChkTxn(@RequestBody byte[] body, HttpServletRequest request) {
+    @PostMapping(value = "/respchktxn/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespChkTxn(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPCHKTXN");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: RESPCHKTXN RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
+        System.out.println("\n  MOCK SWITCH: RESPCHKTXN RECEIVED txnId=" + txnId);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "RESPCHKTXN");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        auditService.logInboundRequest(isoBytes, isoMsg, "RESPCHKTXN", sourceEndpoint);
-        responseService.forwardIsoToBackend(isoBytes, "/switch/respchktxn/2.1", "RESPCHKTXN");
+        auditService.logInboundRequest(isoBytes, isoMsg, "RESPCHKTXN", request.getRemoteAddr() + ":" + request.getRemotePort());
+        responseService.forwardIsoToBackend(isoBytes, "/switch/respchktxn/" + txnId, "RESPCHKTXN");
         return buildAck("RespChkTxn");
     }
 
-    @PostMapping(
-        value = "/resphbt/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespHbt(@RequestBody byte[] body, HttpServletRequest request) {
+    @PostMapping(value = "/resphbt/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespHbt(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPHBT");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: RESPHBT RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
+        System.out.println("\n  MOCK SWITCH: RESPHBT RECEIVED txnId=" + txnId);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "RESPHBT");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        auditService.logInboundRequest(isoBytes, isoMsg, "RESPHBT", sourceEndpoint);
-        responseService.forwardIsoToBackend(isoBytes, "/switch/resphbt/2.1", "RESPHBT");
+        auditService.logInboundRequest(isoBytes, isoMsg, "RESPHBT", request.getRemoteAddr() + ":" + request.getRemotePort());
+        responseService.forwardIsoToBackend(isoBytes, "/switch/resphbt/" + txnId, "RESPHBT");
         return buildAck("RespHbt");
     }
 
-    @PostMapping(
-        value = "/respvaladd/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespValAdd(@RequestBody byte[] body, HttpServletRequest request) {
+    @PostMapping(value = "/respvaladd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespValAdd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPVALADD");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: RESPVALADD RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
+        System.out.println("\n  MOCK SWITCH: RESPVALADD RECEIVED txnId=" + txnId);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "RESPVALADD");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        auditService.logInboundRequest(isoBytes, isoMsg, "RESPVALADD", sourceEndpoint);
-        responseService.forwardIsoToBackend(isoBytes, "/switch/respvaladd/2.1", "RESPVALADD");
+        auditService.logInboundRequest(isoBytes, isoMsg, "RESPVALADD", request.getRemoteAddr() + ":" + request.getRemotePort());
+        responseService.forwardIsoToBackend(isoBytes, "/switch/respvaladd/" + txnId, "RESPVALADD");
         return buildAck("RespValAdd");
     }
 
-    @PostMapping(
-        value = "/resplistaccpvd/2.1",
-        consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE },
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String handleRespListAccPvd(@RequestBody byte[] body, HttpServletRequest request) {
+    @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
+    public String handleRespListAccPvd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPLISTACCPVD");
-        System.out.println("\n===========================================");
-        System.out.println("  MOCK SWITCH: RESPLISTACCPVD RECEIVED (" + (request.getContentType() != null && request.getContentType().toLowerCase().contains("xml") ? "XML→ISO" : "ISO") + ")");
-        System.out.println("===========================================");
+        System.out.println("\n  MOCK SWITCH: RESPLISTACCPVD RECEIVED txnId=" + txnId);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "RESPLISTACCPVD");
-        String sourceEndpoint = request.getRemoteAddr() + ":" + request.getRemotePort();
-        auditService.logInboundRequest(isoBytes, isoMsg, "RESPLISTACCPVD", sourceEndpoint);
-        responseService.forwardIsoToBackend(isoBytes, "/switch/resplistaccpvd/2.1", "RESPLISTACCPVD");
+        auditService.logInboundRequest(isoBytes, isoMsg, "RESPLISTACCPVD", request.getRemoteAddr() + ":" + request.getRemotePort());
+        responseService.forwardIsoToBackend(isoBytes, "/switch/resplistaccpvd/" + txnId, "RESPLISTACCPVD");
         return buildAck("RespListAccPvd");
     }
 

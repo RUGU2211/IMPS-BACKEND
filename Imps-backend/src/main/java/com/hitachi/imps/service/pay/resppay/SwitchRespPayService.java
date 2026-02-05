@@ -35,7 +35,17 @@ public class SwitchRespPayService {
     @Async
     public void processAsync(byte[] isoBytes) {
         try {
-            process(isoBytes);
+            process(isoBytes, null);
+        } catch (Exception e) {
+            System.err.println("SwitchRespPayService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(byte[] isoBytes, String pathTxnId) {
+        try {
+            process(isoBytes, pathTxnId);
         } catch (Exception e) {
             System.err.println("SwitchRespPayService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -43,6 +53,10 @@ public class SwitchRespPayService {
     }
 
     public void process(byte[] isoBytes) {
+        process(isoBytes, null);
+    }
+
+    public void process(byte[] isoBytes, String pathTxnId) {
         // 1. Unpack ISO to extract fields
         ISOMsg iso = IsoUtil.unpack(isoBytes, new ImpsIsoPackager());
         
@@ -81,9 +95,11 @@ public class SwitchRespPayService {
         String xml = isoToXmlConverter.convertRespPayToXml(isoBytes);
 
         // 4. Update transaction status in database (with resp_xml and resp_out_date_time)
+        // Use pathTxnId from callback URL first (same id IMPS used when sending to switch); fallback to DE120
+        String lookupId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
         try {
-            if (originalTxnId != null && !originalTxnId.isBlank()) {
-                transactionService.findOptionalByTxnId(originalTxnId).ifPresent(txn -> {
+            if (lookupId != null && !lookupId.isBlank()) {
+                transactionService.findOptionalByTxnId(lookupId).ifPresent(txn -> {
                     // Perform transaction validation
                     TransactionValidationService.ValidationResult validationResult =
                         validationService.validateTransaction(iso, txn);
@@ -102,7 +118,7 @@ public class SwitchRespPayService {
                     }
                 });
             } else {
-                System.out.println("=== WARNING: No original txnId found, cannot update transaction ===");
+                System.out.println("=== WARNING: No txnId (path or DE120), cannot update transaction ===");
             }
         } catch (Exception e) {
             System.err.println("Error updating transaction status: " + e.getMessage());
@@ -115,15 +131,18 @@ public class SwitchRespPayService {
         System.out.println("=== XML Response Message Built ===");
         System.out.println(xml);
 
-        // 6. Send XML to NPCI Mock Client (optional - won't fail if not running)
+        // 6. Send XML to NPCI Mock Client (dynamic URL /npci/resppay/{txnId})
+        String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
         try {
-            String response = npciMockClient.sendRespPay(xml);
-            if (response != null) {
-                System.out.println("=== NPCI MOCK CLIENT ACK Received ===");
-                System.out.println(response);
-            } else {
+            if (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("resppay/" + txnIdForNpci + " send to npci");
+            String response = (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                ? npciMockClient.sendRespPay(xml, txnIdForNpci)
+                : npciMockClient.sendRespPay(xml);
+            if (response != null && txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("npci ack receive for resppay/" + txnIdForNpci);
+            if (response == null && txnIdForNpci != null)
                 System.out.println("=== WARNING: NPCI Mock Client not available (port 8083) - Continuing without ACK ===");
-            }
         } catch (Exception e) {
             System.out.println("=== WARNING: NPCI Mock Client not available - Continuing without ACK ===");
             System.out.println("   Error: " + e.getMessage());

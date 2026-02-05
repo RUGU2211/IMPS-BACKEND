@@ -31,7 +31,17 @@ public class SwitchRespValAddService {
     @Async
     public void processAsync(byte[] isoBytes) {
         try {
-            process(isoBytes);
+            process(isoBytes, null);
+        } catch (Exception e) {
+            System.err.println("SwitchRespValAddService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(byte[] isoBytes, String pathTxnId) {
+        try {
+            process(isoBytes, pathTxnId);
         } catch (Exception e) {
             System.err.println("SwitchRespValAddService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -39,6 +49,10 @@ public class SwitchRespValAddService {
     }
 
     public void process(byte[] isoBytes) {
+        process(isoBytes, null);
+    }
+
+    public void process(byte[] isoBytes, String pathTxnId) {
         // 1. Unpack ISO to extract DE120 (original txnId), DE39 (response code), DE38 (approval)
         ISOMsg iso = IsoUtil.unpack(isoBytes, new ImpsIsoPackager());
         String origTxnId = null;
@@ -69,20 +83,21 @@ public class SwitchRespValAddService {
         System.out.println("DE120 present: " + (iso.hasField(120)));
         System.out.println("Original TxnId (DE120): " + originalTxnId);
         System.out.println("Response Code (DE39): " + responseCode);
-        if (originalTxnId == null || originalTxnId.isBlank()) {
-            System.err.println("=== WARNING: DE120 is null/blank — cannot update transaction row ===");
+        // Use pathTxnId from callback URL first, then DE120
+        String lookupId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
+        if (lookupId == null || lookupId.isBlank()) {
+            System.err.println("=== WARNING: No txnId (path or DE120) — cannot update transaction row ===");
         }
 
         // 3. Convert ISO to XML first (so we can store it in transaction)
         String xml = isoToXmlConverter.convertRespValAddToXml(isoBytes);
 
-        // 4. Update transaction status if we have the original txnId (store resp_xml and resp_out_date_time)
+        // 4. Update transaction status (use pathTxnId first, then DE120; fallback: ValAdd legacy by Txn id in req_xml)
         try {
-            if (originalTxnId != null && !originalTxnId.isBlank()) {
-                Optional<TransactionEntity> opt = transactionService.findOptionalByTxnId(originalTxnId);
-                // Fallback: old rows may have txn_id = msgId; DE120 is Txn @id — find by Txn id in req_xml
+            if (lookupId != null && !lookupId.isBlank()) {
+                Optional<TransactionEntity> opt = transactionService.findOptionalByTxnId(lookupId);
                 if (opt.isEmpty()) {
-                    opt = transactionService.findOptionalValAddIsoSentByTxnIdInReqXml(originalTxnId);
+                    opt = transactionService.findOptionalValAddIsoSentByTxnIdInReqXml(lookupId);
                     if (opt.isPresent()) {
                         System.out.println("=== ValAdd transaction found by Txn id in req_xml (fallback for legacy row) ===");
                     }
@@ -98,7 +113,7 @@ public class SwitchRespValAddService {
                         System.out.println("=== ValAdd transaction marked FAILED (code: " + responseCode + ") ===");
                     }
                 } else {
-                    System.err.println("=== WARNING: ValAdd response DE120=" + originalTxnId + " — no matching transaction (by txn_id or req_xml). Is Mock Switch sending responses to this IMPS backend? ===");
+                    System.err.println("=== WARNING: ValAdd response lookupId=" + lookupId + " — no matching transaction (by txn_id or req_xml). Is Mock Switch sending responses to this IMPS backend? ===");
                 }
             }
         } catch (Exception e) {
@@ -112,15 +127,18 @@ public class SwitchRespValAddService {
         System.out.println("=== XML Response Message Built ===");
         System.out.println(xml);
 
-        // 6. Send XML to NPCI Mock Client (optional - won't fail if not running)
+        // 6. Send XML to NPCI Mock Client (dynamic URL /npci/respvaladd/{txnId})
+        String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
         try {
-            String response = npciMockClient.sendRespValAdd(xml);
-            if (response != null) {
-                System.out.println("=== NPCI MOCK CLIENT ACK Received ===");
-                System.out.println(response);
-            } else {
+            if (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("respvaladd/" + txnIdForNpci + " send to npci");
+            String response = (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                ? npciMockClient.sendRespValAdd(xml, txnIdForNpci)
+                : npciMockClient.sendRespValAdd(xml);
+            if (response != null && txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("npci ack receive for respvaladd/" + txnIdForNpci);
+            if (response == null && txnIdForNpci != null)
                 System.out.println("=== WARNING: NPCI Mock Client not available (port 8083) - Continuing without ACK ===");
-            }
         } catch (Exception e) {
             System.out.println("=== WARNING: NPCI Mock Client not available - Continuing without ACK ===");
             System.out.println("   Error: " + e.getMessage());

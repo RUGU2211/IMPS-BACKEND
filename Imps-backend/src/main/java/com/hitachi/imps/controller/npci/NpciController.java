@@ -16,13 +16,11 @@ import com.hitachi.imps.service.listaccpvd.reqlistaccpvd.NpciReqListAccPvdServic
 import com.hitachi.imps.service.listaccpvd.resplistaccpvd.NpciRespListAccPvdService;
 import com.hitachi.imps.service.valadd.reqvaladd.NpciReqValAddService;
 import com.hitachi.imps.service.valadd.respvaladd.NpciRespValAddService;
+import com.hitachi.imps.client.NpciMockClient;
 
 /**
- * Controller for handling all NPCI XML requests.
- * 
- * Flow:
- * - Request endpoints: NPCI sends XML → App returns ACK → App converts to ISO → Sends to Switch
- * - Response endpoints: NPCI sends XML response → App returns ACK → App converts to ISO → Sends to Switch
+ * Handles NPCI XML requests. Dynamic paths only: /npci/{reqpay|resppay|...}/{txnId}.
+ * Each request must use a unique txn_id (different per request type and per consecutive request e.g. each reqhbt).
  */
 @RestController
 @RequestMapping("/npci")
@@ -30,245 +28,120 @@ public class NpciController {
 
     @Autowired private AckService ackService;
     @Autowired private XmlParsingService xmlParsingService;
-
-    // Pay services
+    @Autowired private NpciMockClient npciMockClient;
     @Autowired private NpciReqPayService reqPayService;
     @Autowired private NpciRespPayService respPayService;
-
-    // ChkTxn services
     @Autowired private NpciReqChkTxnService reqChkTxnService;
     @Autowired private NpciRespChkTxnService respChkTxnService;
-
-    // Heartbeat services
     @Autowired private NpciReqHbtService reqHbtService;
     @Autowired private NpciRespHbtService respHbtService;
-
-    // ListAccPvd services
     @Autowired private NpciReqListAccPvdService reqListAccPvdService;
     @Autowired private NpciRespListAccPvdService respListAccPvdService;
-
-    // ValAdd services
     @Autowired private NpciReqValAddService reqValAddService;
     @Autowired private NpciRespValAddService respValAddService;
 
-    /* ===============================
-       1. REQPAY - Funds Transfer Request
-       =============================== */
-    @PostMapping(
-        value = "/reqpay/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String reqPay(@RequestBody String xml) {
-        System.out.println("=== NPCI REQPAY RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("============================");
-
+    @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String reqPay(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("imps reqpay receive");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("ReqPay", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        reqPayService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        System.out.println("ack send to npci");
+        reqPayService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       2. RESPPAY - Funds Transfer Response
-       (When NPCI sends back RespPay)
-       =============================== */
-    @PostMapping(
-        value = "/resppay/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String respPay(@RequestBody String xml) {
-        System.out.println("=== NPCI RESPPAY RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("=============================");
-
+    @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String respPay(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("=== NPCI RESPPAY RECEIVED txnId=" + txnId + " ===");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("RespPay", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        respPayService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        respPayService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       3. REQCHKTXN - Check Transaction Status Request
-       =============================== */
-    @PostMapping(
-        value = "/reqchktxn/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String reqChkTxn(@RequestBody String xml) {
-        System.out.println("=== NPCI REQCHKTXN RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("===============================");
-
+    @PostMapping(value = "/reqchktxn/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String reqChkTxn(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("imps reqchktxn receive");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("ReqChkTxn", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        reqChkTxnService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        System.out.println("ack send to npci");
+        reqChkTxnService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       4. RESPCHKTXN - Check Transaction Status Response
-       =============================== */
-    @PostMapping(
-        value = "/respchktxn/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String respChkTxn(@RequestBody String xml) {
-        System.out.println("=== NPCI RESPCHKTXN RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("================================");
-
+    @PostMapping(value = "/respchktxn/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String respChkTxn(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("=== NPCI RESPCHKTXN RECEIVED txnId=" + txnId + " ===");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("RespChkTxn", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        respChkTxnService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        respChkTxnService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       5. REQHBT - Heartbeat Request
-       =============================== */
-    @PostMapping(
-        value = "/reqhbt/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String reqHbt(@RequestBody String xml) {
-        System.out.println("=== NPCI REQHBT RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("============================");
-
+    @PostMapping(value = "/reqhbt/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String reqHbt(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("imps reqhbt receive");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("ReqHbt", msgId);
-
-        // Async: Process heartbeat and respond
-        reqHbtService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        System.out.println("ack send to npci");
+        reqHbtService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       6. RESPHBT - Heartbeat Response
-       =============================== */
-    @PostMapping(
-        value = "/resphbt/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String respHbt(@RequestBody String xml) {
-        System.out.println("=== NPCI RESPHBT RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("=============================");
-
+    @PostMapping(value = "/resphbt/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String respHbt(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("=== NPCI RESPHBT RECEIVED txnId=" + txnId + " ===");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("RespHbt", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        respHbtService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        respHbtService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       7. REQLISTACCPVD - List Account Providers Request
-       =============================== */
-    @PostMapping(
-        value = "/reqlistaccpvd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String reqListAccPvd(@RequestBody String xml) {
-        System.out.println("=== NPCI REQLISTACCPVD RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("===================================");
-
+    @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String reqListAccPvd(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("imps reqlistaccpvd receive");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("ReqListAccPvd", msgId);
-
-        // Async: Build response from database
-        reqListAccPvdService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        System.out.println("ack send to npci");
+        reqListAccPvdService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       8. RESPLISTACCPVD - List Account Providers Response
-       =============================== */
-    @PostMapping(
-        value = "/resplistaccpvd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String respListAccPvd(@RequestBody String xml) {
-        System.out.println("=== NPCI RESPLISTACCPVD RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("====================================");
-
+    @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String respListAccPvd(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("=== NPCI RESPLISTACCPVD RECEIVED txnId=" + txnId + " ===");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("RespListAccPvd", msgId);
-
-        // Async: Process response
-        respListAccPvdService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        respListAccPvdService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       9. REQVALADD - Name Enquiry Request
-       =============================== */
-    @PostMapping(
-        value = "/reqvaladd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String reqValAdd(@RequestBody String xml) {
-        System.out.println("=== NPCI REQVALADD RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("===============================");
-
+    @PostMapping(value = "/reqvaladd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String reqValAdd(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("imps reqvaladd receive");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("ReqValAdd", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        reqValAddService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        System.out.println("ack send to npci");
+        reqValAddService.processAsync(xml, txnId);
         return ack;
     }
 
-    /* ===============================
-       10. RESPVALADD - Name Enquiry Response
-       =============================== */
-    @PostMapping(
-        value = "/respvaladd/2.1",
-        consumes = MediaType.APPLICATION_XML_VALUE,
-        produces = MediaType.APPLICATION_XML_VALUE
-    )
-    public String respValAdd(@RequestBody String xml) {
-        System.out.println("=== NPCI RESPVALADD RECEIVED ===");
-        System.out.println(xml);
-        System.out.println("================================");
-
+    @PostMapping(value = "/respvaladd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    public String respValAdd(@PathVariable String txnId, @RequestBody String xml) {
+        System.out.println("=== NPCI RESPVALADD RECEIVED txnId=" + txnId + " ===");
         String msgId = xmlParsingService.extractMsgId(xml);
         String ack = ackService.buildAck("RespValAdd", msgId);
-
-        // Async: Convert XML to ISO and send to Switch
-        respValAddService.processAsync(xml);
-
+        npciMockClient.sendAckToNpciMock(ack);
+        respValAddService.processAsync(xml, txnId);
         return ack;
     }
 }

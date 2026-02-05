@@ -29,6 +29,16 @@ public class NpciRespListAccPvdService {
         }
     }
 
+    @Async
+    public void processAsync(String xml, String pathTxnId) {
+        try {
+            process(xml);
+        } catch (Exception e) {
+            System.err.println("NpciRespListAccPvdService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     public void process(String xml) {
         String msgId = xmlParsingService.extractMsgId(xml);
 

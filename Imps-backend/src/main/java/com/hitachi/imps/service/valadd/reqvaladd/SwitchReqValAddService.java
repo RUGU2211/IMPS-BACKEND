@@ -22,8 +22,13 @@ public class SwitchReqValAddService {
 
     @Async
     public void processAsync(byte[] isoBytes) {
+        processAsync(isoBytes, null);
+    }
+
+    @Async
+    public void processAsync(byte[] isoBytes, String pathTxnId) {
         try {
-            process(isoBytes);
+            process(isoBytes, pathTxnId);
         } catch (Exception e) {
             System.err.println("SwitchReqValAddService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -31,7 +36,11 @@ public class SwitchReqValAddService {
     }
 
     public void process(byte[] isoBytes) {
-        String txnId = "SWITCH_VALADD_REQ_" + System.currentTimeMillis();
+        process(isoBytes, null);
+    }
+
+    public void process(byte[] isoBytes, String pathTxnId) {
+        String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : "SWITCH_VALADD_REQ_" + System.currentTimeMillis();
 
         // 1. Audit incoming ISO (as Base64 for binary safety)
         auditService.saveRawBytes(txnId, "SWITCH_REQVALADD_ISO_IN", isoBytes);
@@ -48,9 +57,9 @@ public class SwitchReqValAddService {
         System.out.println("=== XML Message Built ===");
         System.out.println(xml);
 
-        // 4. Send XML to NPCI Mock Client (optional - won't fail if not running)
+        // 4. Send XML to NPCI Mock Client (dynamic URL with txnId)
         try {
-            String response = npciMockClient.sendReqValAdd(xml);
+            String response = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqValAdd(xml, txnId) : npciMockClient.sendReqValAdd(xml);
             if (response != null) {
                 System.out.println("=== NPCI MOCK CLIENT ACK Received ===");
                 System.out.println(response);

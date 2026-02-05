@@ -36,7 +36,17 @@ public class SwitchRespChkTxnService {
     @Async
     public void processAsync(byte[] isoBytes) {
         try {
-            process(isoBytes);
+            process(isoBytes, null);
+        } catch (Exception e) {
+            System.err.println("SwitchRespChkTxnService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(byte[] isoBytes, String pathTxnId) {
+        try {
+            process(isoBytes, pathTxnId);
         } catch (Exception e) {
             System.err.println("SwitchRespChkTxnService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -44,6 +54,10 @@ public class SwitchRespChkTxnService {
     }
 
     public void process(byte[] isoBytes) {
+        process(isoBytes, null);
+    }
+
+    public void process(byte[] isoBytes, String pathTxnId) {
         // 1. Unpack ISO to extract DE120 (original txnId), DE39 (response code), DE38 (approval)
         ISOMsg iso = IsoUtil.unpack(isoBytes, new ImpsIsoPackager());
         String origTxnId = null;
@@ -75,10 +89,11 @@ public class SwitchRespChkTxnService {
         // 3. Convert ISO to XML first (so we can store it in transaction)
         String xml = isoToXmlConverter.convertRespChkTxnToXml(isoBytes);
 
-        // 4. Update transaction status if we have the original txnId (store resp_xml and resp_out_date_time)
+        // 4. Update transaction status (use pathTxnId from callback URL first, then DE120)
+        String lookupId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
         try {
-            if (originalTxnId != null && !originalTxnId.isBlank()) {
-                Optional<TransactionEntity> opt = transactionService.findOptionalByTxnId(originalTxnId);
+            if (lookupId != null && !lookupId.isBlank()) {
+                Optional<TransactionEntity> opt = transactionService.findOptionalByTxnId(lookupId);
                 opt.ifPresent(txn -> {
                     if ("00".equals(responseCode)) {
                         transactionService.markSuccess(txn, xml, approvalNumber, null);
@@ -89,7 +104,7 @@ public class SwitchRespChkTxnService {
                     }
                 });
             } else {
-                System.out.println("=== WARNING: No original txnId found in DE120, cannot update transaction ===");
+                System.out.println("=== WARNING: No txnId (path or DE120), cannot update transaction ===");
             }
         } catch (Exception e) {
             System.err.println("Error updating ChkTxn transaction status: " + e.getMessage());
@@ -101,15 +116,18 @@ public class SwitchRespChkTxnService {
         System.out.println("=== XML Response Message Built ===");
         System.out.println(xml);
 
-        // 6. Send XML to NPCI Mock Client (optional - won't fail if not running)
+        // 6. Send XML to NPCI Mock Client (dynamic URL /npci/respchktxn/{txnId})
+        String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : originalTxnId;
         try {
-            String response = npciMockClient.sendRespChkTxn(xml);
-            if (response != null) {
-                System.out.println("=== NPCI MOCK CLIENT ACK Received ===");
-                System.out.println(response);
-            } else {
+            if (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("respchktxn/" + txnIdForNpci + " send to npci");
+            String response = (txnIdForNpci != null && !txnIdForNpci.isBlank())
+                ? npciMockClient.sendRespChkTxn(xml, txnIdForNpci)
+                : npciMockClient.sendRespChkTxn(xml);
+            if (response != null && txnIdForNpci != null && !txnIdForNpci.isBlank())
+                System.out.println("npci ack receive for respchktxn/" + txnIdForNpci);
+            if (response == null && txnIdForNpci != null)
                 System.out.println("=== WARNING: NPCI Mock Client not available (port 8083) - Continuing without ACK ===");
-            }
         } catch (Exception e) {
             System.out.println("=== WARNING: NPCI Mock Client not available - Continuing without ACK ===");
             System.out.println("   Error: " + e.getMessage());

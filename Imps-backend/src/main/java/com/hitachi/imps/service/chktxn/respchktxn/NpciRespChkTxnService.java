@@ -36,14 +36,30 @@ public class NpciRespChkTxnService {
         }
     }
 
+    @Async
+    public void processAsync(String xml, String pathTxnId) {
+        try {
+            process(xml, pathTxnId);
+        } catch (Exception e) {
+            System.err.println("NpciRespChkTxnService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
     public void process(String xml) {
+        process(xml, null);
+    }
+
+    public void process(String xml, String pathTxnId) {
         String msgId = xmlParsingService.extractMsgId(xml);
+        String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
+        if (txnId == null || txnId.isBlank()) txnId = msgId;
 
         // 1. Audit incoming XML
         auditService.saveRaw(msgId, "NPCI_RESPCHKTXN_XML_IN", xml);
 
         System.out.println("=== Processing NPCI RespChkTxn ===");
-        System.out.println("MsgId: " + msgId);
+        System.out.println("MsgId: " + msgId + ", TxnId: " + txnId);
 
         // 2. Convert XML to ISO 0210
         ISOMsg iso = xmlToIsoConverter.convertRespChkTxn(xml);
@@ -54,8 +70,8 @@ public class NpciRespChkTxnService {
         System.out.println("=== ISO Response Message Built ===");
         printIso(iso);
 
-        // 4. Send ISO to Switch
-        byte[] response = switchClient.sendRespChkTxn(iso);
+        // 4. Send ISO to Switch: POST /switch/respchktxn/{txnId}
+        byte[] response = switchClient.sendRespChkTxn(iso, txnId);
 
         if (response != null) {
             System.out.println("=== Switch ACK Received ===");

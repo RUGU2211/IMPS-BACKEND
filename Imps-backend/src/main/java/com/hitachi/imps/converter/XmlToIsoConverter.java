@@ -27,6 +27,11 @@ public class XmlToIsoConverter {
        As per IMPS Specification
        =============================== */
     public ISOMsg convertReqPay(String xml) {
+        return convertReqPay(xml, null);
+    }
+
+    /** Convert ReqPay XML to ISO; when txnIdForDe120 is provided, use it for DE120 (so switch response matches stored transaction). */
+    public ISOMsg convertReqPay(String xml, String txnIdForDe120) {
         try {
             Map<String, String> tags = XmlUtil.parseReqPay(xml);
 
@@ -82,8 +87,8 @@ public class XmlToIsoConverter {
                 iso.set(103, payeeAc);
             }
 
-            // DE120: Additional data (Transaction ID from XML)
-            String txnId = tags.get("txnId");
+            // DE120: Transaction ID (use resolved txnId so switch echoes it back for DB lookup)
+            String txnId = (txnIdForDe120 != null && !txnIdForDe120.isEmpty()) ? txnIdForDe120 : tags.get("txnId");
             if (txnId != null && !txnId.isEmpty()) {
                 iso.set(120, txnId);
             }

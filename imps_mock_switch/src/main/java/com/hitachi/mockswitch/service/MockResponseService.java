@@ -79,6 +79,11 @@ public class MockResponseService {
        =============================== */
     @Async
     public void sendRespPayAsync(byte[] reqIsoBytes, Long inboundAuditId) {
+        sendRespPayAsync(reqIsoBytes, inboundAuditId, null);
+    }
+
+    @Async
+    public void sendRespPayAsync(byte[] reqIsoBytes, Long inboundAuditId, String inboundTxnId) {
         try {
             // Simulate processing delay
             Thread.sleep(responseDelayMs);
@@ -112,8 +117,10 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber()); // Approval number
             respIso.set(39, responseCode); // 00=success, 51=insufficient funds, 14=invalid account, 96=error
 
-            // Send to IMPS Backend with audit
-            sendToBackendWithAudit(respIso, "/switch/resppay/2.1", "RESPPAY", inboundAuditId);
+            // Send to IMPS Backend: http://localhost:8081/switch/resppay/{txn_id}
+            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
+                ? "/switch/resppay/" + inboundTxnId : "/switch/resppay/placeholder";
+            sendToBackendWithAudit(respIso, endpoint, "RESPPAY", inboundAuditId);
 
         } catch (Exception e) {
             System.err.println("Error sending RespPay: " + e.getMessage());
@@ -126,6 +133,11 @@ public class MockResponseService {
        =============================== */
     @Async
     public void sendRespChkTxnAsync(byte[] reqIsoBytes, Long inboundAuditId) {
+        sendRespChkTxnAsync(reqIsoBytes, inboundAuditId, null);
+    }
+
+    @Async
+    public void sendRespChkTxnAsync(byte[] reqIsoBytes, Long inboundAuditId, String inboundTxnId) {
         try {
             Thread.sleep(responseDelayMs);
 
@@ -148,7 +160,9 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber());
             respIso.set(39, "00"); // Transaction found, SUCCESS
 
-            sendToBackendWithAudit(respIso, "/switch/respchktxn/2.1", "RESPCHKTXN", inboundAuditId);
+            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
+                ? "/switch/respchktxn/" + inboundTxnId : "/switch/respchktxn/placeholder";
+            sendToBackendWithAudit(respIso, endpoint, "RESPCHKTXN", inboundAuditId);
 
         } catch (Exception e) {
             System.err.println("Error sending RespChkTxn: " + e.getMessage());
@@ -161,6 +175,11 @@ public class MockResponseService {
        =============================== */
     @Async
     public void sendRespHbtAsync(byte[] reqIsoBytes, Long inboundAuditId) {
+        sendRespHbtAsync(reqIsoBytes, inboundAuditId, null);
+    }
+
+    @Async
+    public void sendRespHbtAsync(byte[] reqIsoBytes, Long inboundAuditId, String inboundTxnId) {
         try {
             Thread.sleep(responseDelayMs);
 
@@ -182,7 +201,9 @@ public class MockResponseService {
             respIso.set(13, LocalDateTime.now().format(DATE_FORMAT));
             respIso.set(39, "00"); // Heartbeat OK
 
-            sendToBackendWithAudit(respIso, "/switch/resphbt/2.1", "RESPHBT", inboundAuditId);
+            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
+                ? "/switch/resphbt/" + inboundTxnId : "/switch/resphbt/placeholder";
+            sendToBackendWithAudit(respIso, endpoint, "RESPHBT", inboundAuditId);
 
         } catch (Exception e) {
             System.err.println("Error sending RespHbt: " + e.getMessage());
@@ -195,6 +216,11 @@ public class MockResponseService {
        =============================== */
     @Async
     public void sendRespValAddAsync(byte[] reqIsoBytes, Long inboundAuditId) {
+        sendRespValAddAsync(reqIsoBytes, inboundAuditId, null);
+    }
+
+    @Async
+    public void sendRespValAddAsync(byte[] reqIsoBytes, Long inboundAuditId, String inboundTxnId) {
         try {
             Thread.sleep(responseDelayMs);
 
@@ -221,7 +247,9 @@ public class MockResponseService {
             // Add account holder name in additional data
             respIso.set(48, "ACCOUNT_HOLDER_NAME");
 
-            sendToBackendWithAudit(respIso, "/switch/respvaladd/2.1", "RESPVALADD", inboundAuditId);
+            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
+                ? "/switch/respvaladd/" + inboundTxnId : "/switch/respvaladd/placeholder";
+            sendToBackendWithAudit(respIso, endpoint, "RESPVALADD", inboundAuditId);
 
         } catch (Exception e) {
             System.err.println("Error sending RespValAdd: " + e.getMessage());
@@ -234,6 +262,11 @@ public class MockResponseService {
        =============================== */
     @Async
     public void sendRespListAccPvdAsync(byte[] reqIsoBytes, Long inboundAuditId) {
+        sendRespListAccPvdAsync(reqIsoBytes, inboundAuditId, null);
+    }
+
+    @Async
+    public void sendRespListAccPvdAsync(byte[] reqIsoBytes, Long inboundAuditId, String inboundTxnId) {
         try {
             Thread.sleep(responseDelayMs);
 
@@ -257,7 +290,9 @@ public class MockResponseService {
             // Add mock bank list in additional data
             respIso.set(48, "HDFC|ICICI|SBI|AXIS");
 
-            sendToBackendWithAudit(respIso, "/switch/resplistaccpvd/2.1", "RESPLISTACCPVD", inboundAuditId);
+            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
+                ? "/switch/resplistaccpvd/" + inboundTxnId : "/switch/resplistaccpvd/placeholder";
+            sendToBackendWithAudit(respIso, endpoint, "RESPLISTACCPVD", inboundAuditId);
 
         } catch (Exception e) {
             System.err.println("Error sending RespListAccPvd: " + e.getMessage());

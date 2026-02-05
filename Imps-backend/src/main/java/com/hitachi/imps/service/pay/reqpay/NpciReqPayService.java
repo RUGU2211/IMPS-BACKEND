@@ -32,7 +32,17 @@ public class NpciReqPayService {
     @Async
     public void processAsync(String xml) {
         try {
-            process(xml);
+            process(xml, null);
+        } catch (Exception e) {
+            System.err.println("NpciReqPayService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId) {
+        try {
+            process(xml, pathTxnId);
         } catch (Exception e) {
             System.err.println("NpciReqPayService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -40,21 +50,26 @@ public class NpciReqPayService {
     }
 
     public void process(String xml) {
+        process(xml, null);
+    }
+
+    public void process(String xml, String pathTxnId) {
         String msgId = xmlParsingService.extractMsgId(xml);
-        String txnId = xmlParsingService.extractTxnId(xml);
+        String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
+        if (txnId == null || txnId.isBlank()) txnId = msgId;
 
         // 1. Audit incoming XML
         auditService.saveRaw(msgId, "NPCI_REQPAY_XML_IN", xml);
 
-        // 2. Create transaction record
-        TransactionEntity txn = transactionService.createRequest(txnId != null ? txnId : msgId, xml);
+        // 2. Create transaction record (use path txnId for whole flow)
+        TransactionEntity txn = transactionService.createRequest(txnId, xml);
 
         System.out.println("=== Processing NPCI ReqPay ===");
         System.out.println("MsgId: " + msgId);
         System.out.println("TxnId: " + txnId);
 
-        // 3. Convert XML to ISO 0200
-        ISOMsg iso = xmlToIsoConverter.convertReqPay(xml);
+        // 3. Convert XML to ISO 0200 (pass txnId so DE120 matches stored transaction for response lookup)
+        ISOMsg iso = xmlToIsoConverter.convertReqPay(xml, txnId);
 
         // 4. Set DE fields in transaction for tracking
         try {
@@ -72,9 +87,12 @@ public class NpciReqPayService {
         System.out.println("=== ISO Message Built ===");
         printIso(iso);
 
-        // 6. Mark ISO sent and send to Switch
+        // 6. Mark ISO sent and send to Switch: POST /switch/reqpay/{txnId}
         transactionService.markIsoSent(txn);
-        byte[] response = switchClient.sendReqPay(iso);
+        System.out.println("reqpay/" + txnId + " send to switch");
+        byte[] response = switchClient.sendReqPay(iso, txnId);
+        if (response != null)
+            System.out.println("switch ack receive of reqpay/" + txnId);
 
         if (response == null) {
             System.out.println("=== No Response from Switch ===");

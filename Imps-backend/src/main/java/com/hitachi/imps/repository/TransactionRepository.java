@@ -17,8 +17,9 @@ extends JpaRepository<TransactionEntity, Integer> {
 	String de37,
 	String de13
 	);
-    Optional<TransactionEntity> findByTxnId(String txnId);
-	Optional<TransactionEntity>findTopByTxnIdOrderByIdDesc(String txnId);
+	Optional<TransactionEntity> findByTxnId(String txnId);
+	Optional<TransactionEntity> findTopByTxnIdOrderByIdDesc(String txnId);
+	boolean existsByTxnId(String txnId);
 	 Optional<TransactionEntity>findTopByTxnIdOrderByReqInDateTimeDesc(String txnId);
 
 	/** Find VALADD transactions in ISO_SENT (for fallback lookup by Txn id in req_xml). */

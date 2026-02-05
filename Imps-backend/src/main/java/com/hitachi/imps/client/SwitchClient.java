@@ -23,37 +23,28 @@ public class SwitchClient {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
-    /* ===============================
-       GENERIC SEND METHOD (byte[])
-       =============================== */
-    public byte[] send(String endpointKey, byte[] isoBytes) {
-        try {
-            String url = routingConfig.getSwitch().getFullUrl(endpointKey);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-
-            HttpEntity<byte[]> request = new HttpEntity<>(isoBytes, headers);
-
-            byte[] response = restTemplate.postForObject(url, request, byte[].class);
-
-            System.out.println("=== SWITCH RESPONSE FROM [" + endpointKey + "] ===");
-            System.out.println("Response length: " + (response != null ? response.length : 0) + " bytes");
-            System.out.println("================================================");
-
-            return response;
-
-        } catch (Exception e) {
-            System.err.println("SWITCH SEND FAILED [" + endpointKey + "]: " + e.getMessage());
-            return null;
-        }
+    /**
+     * Build dynamic Switch URL: http://localhost:8082/switch/{reqpay|reqchktxn|reqvaladd|reqhbt|reqlistaccpvd}/{txn_id}
+     */
+    private String buildDynamicUrl(String apiType, String txnId) {
+        String base = routingConfig.getSwitch().getBaseUrl();
+        return base + "/switch/" + apiType + "/" + (txnId != null ? txnId : "");
     }
 
-    /* ===============================
-       SEND ISOMsg (Convenience Method)
-       =============================== */
-    public byte[] send(String endpointKey, ISOMsg iso) {
-        return send(endpointKey, IsoUtil.pack(iso));
+    /** Send to dynamic URL: /switch/{apiType}/{txnId} */
+    private byte[] sendDynamic(String apiType, String txnId, byte[] isoBytes) {
+        if (txnId == null || txnId.isBlank()) return null;
+        try {
+            String url = buildDynamicUrl(apiType, txnId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            HttpEntity<byte[]> request = new HttpEntity<>(isoBytes, headers);
+            byte[] response = restTemplate.postForObject(url, request, byte[].class);
+            return response;
+        } catch (Exception e) {
+            System.err.println("SWITCH SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            return null;
+        }
     }
 
     /* ===============================
@@ -61,112 +52,76 @@ public class SwitchClient {
        =============================== */
 
     /**
-     * Send ReqPay ISO to Switch (0200)
+     * Send ReqPay ISO to Switch: POST /switch/reqpay/{txnId}
      */
-    public byte[] sendReqPay(ISOMsg iso) {
-        return send("reqpay", iso);
+    public byte[] sendReqPay(ISOMsg iso, String txnId) {
+        return sendDynamic("reqpay", txnId, IsoUtil.pack(iso));
     }
 
-    public byte[] sendReqPay(byte[] isoBytes) {
-        return send("reqpay", isoBytes);
+    public byte[] sendReqPay(byte[] isoBytes, String txnId) {
+        return sendDynamic("reqpay", txnId, isoBytes);
     }
 
     /**
-     * Send RespPay ISO to Switch (0210)
+     * Send ReqChkTxn ISO to Switch: POST /switch/reqchktxn/{txnId}
      */
-    public byte[] sendRespPay(ISOMsg iso) {
-        return send("resppay", iso);
+    public byte[] sendReqChkTxn(ISOMsg iso, String txnId) {
+        return sendDynamic("reqchktxn", txnId, IsoUtil.pack(iso));
     }
 
-    public byte[] sendRespPay(byte[] isoBytes) {
-        return send("resppay", isoBytes);
+    public byte[] sendReqChkTxn(byte[] isoBytes, String txnId) {
+        return sendDynamic("reqchktxn", txnId, isoBytes);
     }
 
     /**
-     * Send ReqChkTxn ISO to Switch
+     * Send ReqHbt ISO to Switch: POST /switch/reqhbt/{txnId}
      */
-    public byte[] sendReqChkTxn(ISOMsg iso) {
-        return send("reqchktxn", iso);
+    public byte[] sendReqHbt(ISOMsg iso, String txnId) {
+        return sendDynamic("reqhbt", txnId, IsoUtil.pack(iso));
     }
 
-    public byte[] sendReqChkTxn(byte[] isoBytes) {
-        return send("reqchktxn", isoBytes);
+    public byte[] sendReqHbt(byte[] isoBytes, String txnId) {
+        return sendDynamic("reqhbt", txnId, isoBytes);
     }
 
     /**
-     * Send RespChkTxn ISO to Switch
+     * Send ReqListAccPvd ISO to Switch: POST /switch/reqlistaccpvd/{txnId}
      */
-    public byte[] sendRespChkTxn(ISOMsg iso) {
-        return send("respchktxn", iso);
+    public byte[] sendReqListAccPvd(ISOMsg iso, String txnId) {
+        return sendDynamic("reqlistaccpvd", txnId, IsoUtil.pack(iso));
     }
 
-    public byte[] sendRespChkTxn(byte[] isoBytes) {
-        return send("respchktxn", isoBytes);
+    public byte[] sendReqListAccPvd(byte[] isoBytes, String txnId) {
+        return sendDynamic("reqlistaccpvd", txnId, isoBytes);
     }
 
     /**
-     * Send ReqHbt ISO to Switch (0800)
+     * Send ReqValAdd ISO to Switch: POST /switch/reqvaladd/{txnId}
      */
-    public byte[] sendReqHbt(ISOMsg iso) {
-        return send("reqhbt", iso);
+    public byte[] sendReqValAdd(ISOMsg iso, String txnId) {
+        return sendDynamic("reqvaladd", txnId, IsoUtil.pack(iso));
     }
 
-    public byte[] sendReqHbt(byte[] isoBytes) {
-        return send("reqhbt", isoBytes);
+    public byte[] sendReqValAdd(byte[] isoBytes, String txnId) {
+        return sendDynamic("reqvaladd", txnId, isoBytes);
     }
 
     /**
-     * Send RespHbt ISO to Switch (0810)
+     * Send RespPay ISO to Switch (when IMPS forwards NPCI response): POST /switch/resppay/{txnId}
      */
-    public byte[] sendRespHbt(ISOMsg iso) {
-        return send("resphbt", iso);
+    public byte[] sendRespPay(ISOMsg iso, String txnId) {
+        return txnId != null && !txnId.isBlank() ? sendDynamic("resppay", txnId, IsoUtil.pack(iso)) : null;
     }
 
-    public byte[] sendRespHbt(byte[] isoBytes) {
-        return send("resphbt", isoBytes);
+    public byte[] sendRespChkTxn(ISOMsg iso, String txnId) {
+        return txnId != null && !txnId.isBlank() ? sendDynamic("respchktxn", txnId, IsoUtil.pack(iso)) : null;
     }
 
-    /**
-     * Send ReqListAccPvd ISO to Switch
-     */
-    public byte[] sendReqListAccPvd(ISOMsg iso) {
-        return send("reqlistaccpvd", iso);
+    public byte[] sendRespHbt(ISOMsg iso, String txnId) {
+        return txnId != null && !txnId.isBlank() ? sendDynamic("resphbt", txnId, IsoUtil.pack(iso)) : null;
     }
 
-    public byte[] sendReqListAccPvd(byte[] isoBytes) {
-        return send("reqlistaccpvd", isoBytes);
-    }
-
-    /**
-     * Send RespListAccPvd ISO to Switch
-     */
-    public byte[] sendRespListAccPvd(ISOMsg iso) {
-        return send("resplistaccpvd", iso);
-    }
-
-    public byte[] sendRespListAccPvd(byte[] isoBytes) {
-        return send("resplistaccpvd", isoBytes);
-    }
-
-    /**
-     * Send ReqValAdd ISO to Switch
-     */
-    public byte[] sendReqValAdd(ISOMsg iso) {
-        return send("reqvaladd", iso);
-    }
-
-    public byte[] sendReqValAdd(byte[] isoBytes) {
-        return send("reqvaladd", isoBytes);
-    }
-
-    /**
-     * Send RespValAdd ISO to Switch
-     */
-    public byte[] sendRespValAdd(ISOMsg iso) {
-        return send("respvaladd", iso);
-    }
-
-    public byte[] sendRespValAdd(byte[] isoBytes) {
-        return send("respvaladd", isoBytes);
+    public byte[] sendRespValAdd(ISOMsg iso, String txnId) {
+        return txnId != null && !txnId.isBlank() ? sendDynamic("respvaladd", txnId, IsoUtil.pack(iso)) : null;
     }
 }

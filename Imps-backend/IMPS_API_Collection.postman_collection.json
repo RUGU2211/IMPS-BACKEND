@@ -1,19 +1,29 @@
 {
   "info": {
     "_postman_id": "imps-api-collection-2026",
-    "name": "IMPS API Collection v2.1",
-    "description": "Complete IMPS API Collection for NPCI and Switch endpoints. All request/response bodies use the NPCI message format defined in project root: NPCI_IMPS_Message_Formats.md (ReqPay 6.1, RespPay 6.2, ReqChkTxn 7.1, RespChkTxn).\n\n- Pay (Fund Transfer), ChkTxn (Check Transaction Status), Heartbeat, ListAccPvd, ValAdd\n- NPCI Endpoints: XML (application/xml). Switch: application/xml or application/octet-stream (ISO).\n- Ports: IMPS Backend 8081, Mock Switch 8082, NPCI Mock 8083.\n\nTest data (imps_full_schema.sql account_master):\n- Rugved Kharde 1234567890123456 @ HDFC0000001, Chetan Mokashi 9876543210987654 @ HDFC0000001\n- Sajid Mulla 1111222233334444 @ ICIC0000001, Madhav Shipure 5555666677778888 @ SBIN0000001\n- Use these for API testing; Mock Switch debit/credit on success (00).\n\nDatabase: imps_db.",
+    "name": "IMPS API Collection (Dynamic)",
+    "description": "IMPS APIs use dynamic URLs with txn_id. Same txn_id is used for the full flow (NPCI → IMPS → Switch → IMPS → NPCI).\n\n- NPCI → IMPS: POST http://localhost:8081/imps/{reqpay|reqchktxn|reqvaladd|reqhbt|reqlistaccpvd}/{txn_id}\n- IMPS → Switch: POST http://localhost:8082/switch/{reqpay|reqchktxn|reqvaladd|reqhbt|reqlistaccpvd}/{txn_id}\n- Switch → IMPS: POST http://localhost:8081/switch/{resppay|respchktxn|respvaladd|resphbt|resplistaccpvd}/{txn_id}\n- IMPS → NPCI: POST http://localhost:8083/npci/{resppay|respchktxn|respvaladd|resphbt|resplistaccpvd}/{txn_id}\n\nACK: IMPS returns <ns2:Ack ... api=\"ReqPay\" reqMsgId=\"\" ts=\"\"></ns2:Ack>. reqMsgId = Head @msgId from request (required). api = message type (ReqPay, RespPay, etc.). Duplicate txn_id returns 409. Missing reqMsgId returns 400.\n\nMessage ID (msgId): Exactly 35 characters = Bank Participation Code (3, assigned by NPCI) + Unique ID (32, UUID/random/system-generated). Mandatory for ACK. txnId (Txn @id): same format, 35 chars. Use unique values per request.\n\nPorts: IMPS 8081, Mock Switch 8082, NPCI Mock 8083.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
-      "key": "npciBaseUrl",
+      "key": "impsBaseUrl",
       "value": "http://localhost:8081",
       "type": "string"
     },
     {
       "key": "switchBaseUrl",
       "value": "http://localhost:8082",
+      "type": "string"
+    },
+    {
+      "key": "npciMockBaseUrl",
+      "value": "http://localhost:8083",
+      "type": "string"
+    },
+    {
+      "key": "txnId",
+      "value": "BAN00000000000000000000000000000001",
       "type": "string"
     },
     {
@@ -25,12 +35,38 @@
       "key": "npciOrgId",
       "value": "NPCI",
       "type": "string"
+    },
+    {
+      "key": "msgId",
+      "value": "BAN5t2Dk18UFMIMFENLBga12345678901234",
+      "type": "string",
+      "description": "Message ID (Head @msgId): exactly 35 characters = Bank Participation Code (3, assigned by NPCI) + Unique ID (32, UUID/random/system-generated). Mandatory; required for ACK."
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// txnId / msgId: exactly 35 chars = BPC (3) + Unique ID (32). BPC assigned by NPCI; Unique ID = UUID/random/system-generated.",
+          "function gen35() {",
+          "    var bpc = 'BAN';  // Bank Participation Code, 3 chars (replace with NPCI-assigned BPC if different)",
+          "    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';",
+          "    var s = '';",
+          "    for (var i = 0; i < 32; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));",
+          "    return bpc + s;  // 3 + 32 = 35 characters",
+          "}",
+          "pm.collectionVariables.set('txnId', gen35());",
+          "pm.collectionVariables.set('msgId', gen35());"
+        ],
+        "type": "text/javascript"
+      }
     }
   ],
   "item": [
     {
-      "name": "NPCI Endpoints (Port 8081)",
-      "description": "All NPCI XML API endpoints - IMPS Backend running on port 8081",
+      "name": "IMPS - NPCI to IMPS (Port 8081)",
+      "description": "NPCI sends requests to IMPS. Dynamic path: /imps/{reqpay|reqchktxn|reqvaladd|reqhbt|reqlistaccpvd}/{txn_id}. Use unique txnId per request (duplicate returns 409). Rule 021: Head @msgId must be 35 chars (3 BPC + 32). Rule 022: Txn @id must be 35 chars. Head @msgId is required for ACK.",
       "item": [
         {
           "name": "1. Pay APIs",
@@ -51,12 +87,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMFENLBga\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2A Fund Transfer\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMFENLBga1234567890123\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2A Fund Transfer\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqpay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqpay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqpay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay P2A – NPCI format 6.1. Payer: Rugved Kharde 1234567890123456 @ HDFC0000001. Payee: Sajid Mulla 1111222233334444 @ ICIC0000001. Amount 1000.00. Mock Switch debit/credit (00)."
               }
@@ -77,12 +113,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMGzOucfb\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2P Fund Transfer\"\n         custRef=\"023113001284\"\n         refId=\"001284\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"NPCI000000005t2Dk18UFMIMGzOucfc\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Chetan Mokashi\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"9876543210987654|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Chetan Mokashi\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919491916510\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC09101\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"9876543210987654\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"500.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"500.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"SBIN0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"5555666677778888\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMGzOucfb12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2P Fund Transfer\"\n         custRef=\"023113001284\"\n         refId=\"001284\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"BAN5t2Dk18UFMIMGzOucfc12345678901234\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Chetan Mokashi\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"9876543210987654|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Chetan Mokashi\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919491916510\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC09101\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"9876543210987654\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"500.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"500.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"SBIN0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"5555666677778888\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqpay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqpay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqpay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay P2P – NPCI 6.1. Payer: Chetan Mokashi 9876543210987654 @ HDFC0000001. Payee: Madhav Shipure 5555666677778888 @ SBIN0000001. Amount 500.00."
               }
@@ -103,12 +139,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T13:18:37.263+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk05P35IW2iSy2Pq\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Foreign Inward Remittance\"\n         custRef=\"112013002995\"\n         refId=\"002995\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T13:18:37.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"12\"\n         id=\"rZzpW5Cnb\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"10000.00\" curr=\"INR\"/>\n\n        <Institution route=\"RDA\" type=\"BANK\">\n            <Name value=\"TRANSWISE\"\n                  acNum=\"123456789456\"\n                  ifsc=\"PCIN0234123\"/>\n            <Purpose code=\"Credit to Beneficiary in INR\"\n                     note=\"Foreign Inward Remittance\"/>\n            <Originator name=\"John William\"\n                        refNo=\"1234567891\"\n                        type=\"INDIVIDUAL\">\n                <Address location=\"Marlin Apartment Limehouse London\"/>\n            </Originator>\n            <Beneficiary name=\"Sajid Mulla\"/>\n        </Institution>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"10000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T13:18:37.263+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk05P35IW2iSy2Pq12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Foreign Inward Remittance\"\n         custRef=\"112013002995\"\n         refId=\"002995\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T13:18:37.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"12\"\n         id=\"BANrZzpW5Cnb0000000000000000000000000\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"10000.00\" curr=\"INR\"/>\n\n        <Institution route=\"RDA\" type=\"BANK\">\n            <Name value=\"TRANSWISE\"\n                  acNum=\"123456789456\"\n                  ifsc=\"PCIN0234123\"/>\n            <Purpose code=\"Credit to Beneficiary in INR\"\n                     note=\"Foreign Inward Remittance\"/>\n            <Originator name=\"John William\"\n                        refNo=\"1234567891\"\n                        type=\"INDIVIDUAL\">\n                <Address location=\"Marlin Apartment Limehouse London\"/>\n            </Originator>\n            <Beneficiary name=\"Sajid Mulla\"/>\n        </Institution>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"10000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqpay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqpay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqpay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay FIR – NPCI 6.1. Payer Rugved Kharde 1234567890123456 @ HDFC0000001, Payee Sajid Mulla 1111222233334444 @ ICIC0000001. Amount 10000.00. initiationMode=12."
               }
@@ -129,92 +165,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"5t2Dk05P35yQrXk0eCv\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Credit to Beneficiary\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"CREDIT\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Credit to Beneficiary\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"CREDIT\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqpay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqpay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqpay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay CREDIT – NPCI 6.1. Payee Sajid Mulla 1111222233334444 @ ICIC0000001. Amount 1000.00."
-              }
-            },
-            {
-              "name": "RespPay - Success Response (Beneficiary to NPCI)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"700003\"\n          msgId=\"41VdwjcZ9jaI4pifN\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQrXk0eCv\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"Sajid Mulla\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"111374\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resppay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resppay", "2.1"]
-                },
-                "description": "RespPay - Credit Response from Beneficiary Bank to NPCI.\n\nresult = SUCCESS indicates successful credit.\nrespCode = 00 indicates success."
-              }
-            },
-            {
-              "name": "RespPay - Final Response (NPCI to Remitter)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:03+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"1GRDpegBbA64ftevCegR\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"PAY\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"5t2Dk18UFMIMFENLBga\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYER\"\n             seqNum=\"1\"\n             addr=\"{{orgId}}@psp\"\n             regName=\"Rugved Kharde\"\n             acNum=\"\"\n             IFSC=\"\"\n             code=\"4814\"\n             accType=\"SAVINGS\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"APPROVED\"\n             respCode=\"00\"/>\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"Sajid Mulla\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"111374\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resppay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resppay", "2.1"]
-                },
-                "description": "Final RespPay from NPCI to Remitter Bank with both PAYER and PAYEE references."
-              }
-            },
-            {
-              "name": "RespPay - Failure Response",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"700003\"\n          msgId=\"41VdwjcZ9jaI4pifN\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQrXk0eCv\"\n          result=\"FAILURE\"\n          errCode=\"U30\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"0.00\"\n             orgAmount=\"0.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"\"\n             respCode=\"U30\"/>\n    </Resp>\n</ns2:RespPay>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resppay/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resppay", "2.1"]
-                },
-                "description": "RespPay Failure Response.\n\nCommon Error Codes:\n- U30: Beneficiary bank not available\n- U31: Invalid beneficiary IFSC\n- U14: Invalid/Incorrect payee MMID\n- U12: Invalid/Incorrect payee account number"
               }
             }
           ]
@@ -238,12 +196,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:03.976+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMG7zXPZV\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:03.976+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMG7zXPZV12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqchktxn/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqchktxn", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqchktxn/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqchktxn", "{{txnId}}"]
                 },
                 "description": "ReqChkTxn – NPCI 7.1. Payer Rugved Kharde 1234567890123456 @ HDFC0000001, Payee Sajid Mulla 1111222233334444 @ ICIC0000001. type=VR."
               }
@@ -264,66 +222,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:04+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"5t2Dk05P35yQsq6cTn6\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:04+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"BAN5t2Dk05P35yQsq6cTn6123456789012345\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqchktxn/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqchktxn", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqchktxn/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqchktxn", "{{txnId}}"]
                 },
                 "description": "ReqChkTxn forwarded from NPCI to Beneficiary Bank"
-              }
-            },
-            {
-              "name": "RespChkTxn - Status Response (Success)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:05.220+05:30\"\n          orgId=\"700009\"\n          msgId=\"5t2Dk18UFMIMG7Ino6G\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         note=\"Check Transaction Status\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         refCategory=\"00\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"ChkBankStatus\"\n         orgMsgId=\"5t2Dk05P35yQsq6cTn6\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         initiationMode=\"00\"\n         purpose=\"00\"\n         subType=\"PAY\"\n         custRef=\"023113001279\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQsq6cTn6\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             acNum=\"1111222233334444\"\n             regName=\"Sajid Mulla\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             approvalNum=\"111356\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/respchktxn/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "respchktxn", "2.1"]
-                },
-                "description": "RespChkTxn - Transaction Status Response (Success)\n\nrespCode = 00 indicates original transaction was successful"
-              }
-            },
-            {
-              "name": "RespChkTxn - Final Response (NPCI to Remitter)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:05+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"5t2Dk05P35yQsqeCRuJ\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         note=\"Check Transaction Status\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         refCategory=\"00\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"ChkBankStatus\"\n         orgMsgId=\"5t2Dk18UFMIMG7zXPZV\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         initiationMode=\"00\"\n         purpose=\"00\"\n         subType=\"PAY\"\n         custRef=\"023113001279\"/>\n\n    <Resp reqMsgId=\"5t2Dk18UFMIMG7zXPZV\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             acNum=\"1111222233334444\"\n             regName=\"Sajid Mulla\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             approvalNum=\"111356\"\n             respCode=\"00\"/>\n        <Ref type=\"PAYER\"\n             seqNum=\"1\"\n             addr=\"{{orgId}}@psp\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             acNum=\"\"\n             regName=\"Rugved Kharde\"\n             IFSC=\"\"\n             code=\"4814\"\n             accType=\"SAVINGS\"\n             approvalNum=\"APPROVED\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/respchktxn/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "respchktxn", "2.1"]
-                },
-                "description": "Final RespChkTxn from NPCI to Remitter Bank with both PAYER and PAYEE references"
               }
             }
           ]
@@ -347,12 +253,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"HBT123456789012345678901234567890\"/>\n    <Txn id=\"HBT123456789012345678901234567890\"\n         note=\"Heartbeat Check\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"ALIVE\" value=\"NA\"/>\n</upi:ReqHbt>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"HBT123456789012345678901234567890123\"/>\n    <Txn id=\"HBT123456789012345678901234567890123\"\n         note=\"Heartbeat Check\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"ALIVE\" value=\"NA\"/>\n</upi:ReqHbt>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqhbt/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqhbt", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqhbt/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqhbt", "{{txnId}}"]
                 },
                 "description": "ReqHbt - Heartbeat Request (ALIVE)\n\ntype = ALIVE: System health check\nvalue = NA for ALIVE type\n\nNOTE: Heartbeat must be sent every 3 minutes. If no response, NPCI may mark bank BIN down."
               }
@@ -373,66 +279,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T23:59:00.000+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"EOD123456789012345678901234567890\"/>\n    <Txn id=\"EOD123456789012345678901234567890\"\n         note=\"End of Day Signal\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:59:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"EOD\" value=\"2026-01-25\"/>\n</upi:ReqHbt>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T23:59:00.000+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"EOD123456789012345678901234567890123\"/>\n    <Txn id=\"EOD123456789012345678901234567890123\"\n         note=\"End of Day Signal\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:59:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"EOD\" value=\"2026-01-25\"/>\n</upi:ReqHbt>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqhbt/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqhbt", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqhbt/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqhbt", "{{txnId}}"]
                 },
                 "description": "ReqHbt - End of Day (EOD) Signal\n\ntype = EOD: End of Day notification\nvalue = DATE (format: YYYY-MM-DD)"
-              }
-            },
-            {
-              "name": "RespHbt - Heartbeat Response (Success)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:01.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"RHBT12345678901234567890123456789\"/>\n    <Txn id=\"HBT123456789012345678901234567890\"\n         note=\"Heartbeat Response\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT123456789012345678901234567890\"\n          result=\"SUCCESS\"/>\n</upi:RespHbt>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resphbt/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resphbt", "2.1"]
-                },
-                "description": "RespHbt - Heartbeat Response\n\nresult = SUCCESS indicates system is alive and responding"
-              }
-            },
-            {
-              "name": "RespHbt - Heartbeat Response (Failure)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:01.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"RHBT12345678901234567890123456789\"/>\n    <Txn id=\"HBT123456789012345678901234567890\"\n         note=\"Heartbeat Response\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT123456789012345678901234567890\"\n          result=\"FAILURE\"/>\n</upi:RespHbt>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resphbt/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resphbt", "2.1"]
-                },
-                "description": "RespHbt - Heartbeat Failure Response"
               }
             }
           ]
@@ -456,40 +310,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:40:15.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12\"/>\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n</ns2:ReqListAccPvd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:40:15.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12X\"/>\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12X\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n</ns2:ReqListAccPvd>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqlistaccpvd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqlistaccpvd", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqlistaccpvd/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqlistaccpvd", "{{txnId}}"]
                 },
                 "description": "ReqListAccPvd - Request to fetch list of banks, NBIN, IFSCs and their status.\n\nOnly active IFSCs are returned.\nBanks must perform full refresh on every invocation."
-              }
-            },
-            {
-              "name": "RespListAccPvd - List Providers Response",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:45:45.000+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"NPC4a69d250abe5423899c2f5a08fc0qw12\"/>\n\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n\n    <Resp reqMsgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12\"\n          result=\"SUCCESS\"\n          errCode=\"00\"/>\n\n    <AccPvdList>\n        <AccPvd name=\"HDFC BANK LTD\"\n                bankCode=\"HDF\"\n                iin=\"5070\"\n                ifsc=\"HDFC0000001|HDFC0000002|HDFC0000003\"\n                active=\"Y\"\n                url=\"www.hdfcbank.com\"\n                spocName=\"HDFC SPOC\"\n                spocEmail=\"spoc@hdfcbank.com\"\n                spocPhone=\"9192939495\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-20T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n        <AccPvd name=\"ICICI BANK LTD\"\n                bankCode=\"ICI\"\n                iin=\"5048\"\n                ifsc=\"ICIC0000001|ICIC0000002\"\n                active=\"Y\"\n                url=\"www.icicibank.com\"\n                spocName=\"ICICI SPOC\"\n                spocEmail=\"spoc@icicibank.com\"\n                spocPhone=\"9192939496\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-19T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n        <AccPvd name=\"STATE BANK OF INDIA\"\n                bankCode=\"SBI\"\n                iin=\"5022\"\n                ifsc=\"SBIN0000001|SBIN0000002|SBIN0000003|SBIN0000004\"\n                active=\"Y\"\n                url=\"www.sbi.co.in\"\n                spocName=\"SBI SPOC\"\n                spocEmail=\"spoc@sbi.co.in\"\n                spocPhone=\"9192939497\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-18T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n        <AccPvd name=\"AXIS BANK\"\n                bankCode=\"AXB\"\n                iin=\"9211\"\n                ifsc=\"UTIB0000001|UTIB0000002\"\n                active=\"Y\"\n                url=\"www.axisbank.com\"\n                spocName=\"AXIS SPOC\"\n                spocEmail=\"spoc@axisbank.com\"\n                spocPhone=\"9192939498\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-17T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n    </AccPvdList>\n</ns2:RespListAccPvd>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/resplistaccpvd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "resplistaccpvd", "2.1"]
-                },
-                "description": "RespListAccPvd - Response with list of Account Providers\n\nFields:\n- name: Bank Name\n- bankCode: 3-digit bank code\n- iin: 4-digit NBIN\n- ifsc: Pipe-separated IFSC codes\n- active: Y/N status\n- prods: IMPS\n- featureSupported: Reserved (use 01)"
               }
             }
           ]
@@ -513,12 +341,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRH8K84fV\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry Request\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRH8K84fV1234567890123\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry Request\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqvaladd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqvaladd", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqvaladd/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqvaladd", "{{txnId}}"]
                 },
                 "description": "ReqValAdd - Name Enquiry Request\n\ntype = NameEnq: Used to fetch beneficiary name before fund transfer\n\nUsed for account validation before initiating IMPS transfer."
               }
@@ -539,66 +367,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRH8K84fV\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Address Validation\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"ValAdd\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRH8K84fV1234567890123\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\"\n         initiationMode=\"00\"\n         note=\"Address Validation\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"ValAdd\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
                 },
                 "url": {
-                  "raw": "{{npciBaseUrl}}/npci/reqvaladd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "reqvaladd", "2.1"]
+                  "raw": "{{impsBaseUrl}}/imps/reqvaladd/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["imps", "reqvaladd", "{{txnId}}"]
                 },
                 "description": "ReqValAdd - Address Validation Request\n\ntype = ValAdd: Used for address validation"
-              }
-            },
-            {
-              "name": "RespValAdd - Name Enquiry Response (Success)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRHagCNFH\"\n          orgId=\"100155\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:37.335+05:30\"\n          ver=\"2.0\"/>\n\n    <Resp IFSC=\"ICIC0000001\"\n          acNum=\"1111222233334444\"\n          accType=\"SAVINGS\"\n          approvalNum=\"051800\"\n          code=\"0000\"\n          maskName=\"Sajid Mulla\"\n          reqMsgId=\"5t2Dk05P35yVtrggPaK\"\n          result=\"SUCCESS\"\n          type=\"PERSON\">\n        <FeatureSupported value=\"01\"/>\n    </Resp>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n</ns2:RespValAdd>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/respvaladd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "respvaladd", "2.1"]
-                },
-                "description": "RespValAdd - Name Enquiry Response (Success)\n\nReturns:\n- maskName: Beneficiary name (may be masked)\n- accType: Account type\n- IFSC, acNum: Account details\n- FeatureSupported: 01-09 values"
-              }
-            },
-            {
-              "name": "RespValAdd - Name Enquiry Response (Failure)",
-              "request": {
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Content-Type",
-                    "value": "application/xml"
-                  },
-                  {
-                    "key": "Accept",
-                    "value": "application/xml"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRHagCNFH\"\n          orgId=\"100155\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:37.335+05:30\"\n          ver=\"2.0\"/>\n\n    <Resp IFSC=\"ICIC0000001\"\n          acNum=\"1111222233334444\"\n          accType=\"DEFAULT\"\n          approvalNum=\"\"\n          code=\"U12\"\n          maskName=\"\"\n          reqMsgId=\"5t2Dk05P35yVtrggPaK\"\n          result=\"FAILURE\"\n          type=\"PERSON\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n</ns2:RespValAdd>"
-                },
-                "url": {
-                  "raw": "{{npciBaseUrl}}/npci/respvaladd/2.1",
-                  "host": ["{{npciBaseUrl}}"],
-                  "path": ["npci", "respvaladd", "2.1"]
-                },
-                "description": "RespValAdd - Name Enquiry Failure Response\n\nCommon Error Codes:\n- U12: Invalid/Incorrect payee account number\n- U31: Invalid beneficiary IFSC"
               }
             }
           ]
@@ -606,8 +382,139 @@
       ]
     },
     {
-      "name": "Switch Endpoints (Port 8082)",
-      "description": "Mock Switch (port 8082) - Accepts XML and ISO.\n\nUse account_master seed accounts for ReqPay so Mock Switch debit/credit succeeds (00):\nPayer 1234567890123456@HDFC0000001 or 9876543210987654@HDFC0000001, Payee 1111222233334444@ICIC0000001 or 5555666677778888@SBIN0000001.\n\nRequest Endpoints: /switch/reqpay/2.1, reqchktxn/2.1, reqhbt/2.1, reqvaladd/2.1, reqlistaccpvd/2.1\nResponse Endpoints: /switch/resppay/2.1, respchktxn/2.1, resphbt/2.1, respvaladd/2.1, resplistaccpvd/2.1\n\nIMPS Backend sends ISO to Switch. Postman can send XML; Mock Switch converts to ISO, applies debit/credit, then forwards response to Backend.",
+      "name": "NPCI Mock - IMPS to NPCI (Port 8083)",
+      "description": "Simulates IMPS sending responses to NPCI Mock. Dynamic path: /npci/{resppay|respchktxn|respvaladd|resphbt|resplistaccpvd}/{txn_id}. Use same txnId as the request flow.",
+      "item": [
+        {
+          "name": "RespPay",
+          "item": [
+            {
+              "name": "RespPay - Success (Beneficiary to NPCI)",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T10:31:00.000+05:30\" orgId=\"700003\" msgId=\"BAN41VdwjcZ9jaI4pifN12345678901234\" prodType=\"IMPS\"/>\n    <Txn id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\" note=\"Fund Transfer\" refId=\"001276\" custRef=\"023113001276\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T10:30:00.000+05:30\" purpose=\"00\" type=\"CREDIT\" subType=\"PAY\" initiationMode=\"00\" refCategory=\"00\"/>\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\" result=\"SUCCESS\">\n        <Ref type=\"PAYEE\" seqNum=\"0\" addr=\"1111222233334444@ICIC0000001.ifsc.npci\" regName=\"Sajid Mulla\" acNum=\"1111222233334444\" IFSC=\"ICIC0000001\" code=\"0000\" accType=\"SAVINGS\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" approvalNum=\"111374\" respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resppay/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resppay", "{{txnId}}"]},
+                "description": "RespPay – Credit response to NPCI Mock. result=SUCCESS, respCode=00."
+              }
+            },
+            {
+              "name": "RespPay - Final (NPCI to Remitter)",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T10:31:03+05:30\" orgId=\"NPCI\" msgId=\"BAN1GRDpegBbA64ftevCegR1234567890123\" prodType=\"IMPS\"/>\n    <Txn id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\" note=\"Fund Transfer\" refId=\"001276\" custRef=\"023113001276\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T10:30:00.000+05:30\" purpose=\"00\" type=\"PAY\" subType=\"PAY\" initiationMode=\"00\" refCategory=\"00\"/>\n    <Resp reqMsgId=\"BAN5t2Dk18UFMIMFENLBga12345678901234\" result=\"SUCCESS\">\n        <Ref type=\"PAYER\" seqNum=\"1\" addr=\"{{orgId}}@psp\" regName=\"Rugved Kharde\" acNum=\"\" IFSC=\"\" code=\"4814\" accType=\"SAVINGS\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" approvalNum=\"APPROVED\" respCode=\"00\"/>\n        <Ref type=\"PAYEE\" seqNum=\"0\" addr=\"1111222233334444@ICIC0000001.ifsc.npci\" regName=\"Sajid Mulla\" acNum=\"1111222233334444\" IFSC=\"ICIC0000001\" code=\"0000\" accType=\"SAVINGS\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" approvalNum=\"111374\" respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resppay/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resppay", "{{txnId}}"]},
+                "description": "Final RespPay to NPCI Mock with PAYER and PAYEE refs."
+              }
+            },
+            {
+              "name": "RespPay - Failure",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T10:31:00.000+05:30\" orgId=\"700003\" msgId=\"BAN41VdwjcZ9jaI4pifN12345678901234\" prodType=\"IMPS\"/>\n    <Txn id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\" note=\"Fund Transfer\" refId=\"001276\" custRef=\"023113001276\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T10:30:00.000+05:30\" purpose=\"00\" type=\"CREDIT\" subType=\"PAY\" initiationMode=\"00\" refCategory=\"00\"/>\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\" result=\"FAILURE\" errCode=\"U30\">\n        <Ref type=\"PAYEE\" seqNum=\"0\" addr=\"1111222233334444@ICIC0000001.ifsc.npci\" regName=\"\" acNum=\"1111222233334444\" IFSC=\"ICIC0000001\" code=\"0000\" accType=\"SAVINGS\" settAmount=\"0.00\" orgAmount=\"0.00\" settCurrency=\"INR\" approvalNum=\"\" respCode=\"U30\"/>\n    </Resp>\n</ns2:RespPay>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resppay/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resppay", "{{txnId}}"]},
+                "description": "RespPay Failure to NPCI Mock. errCode U30 etc."
+              }
+            }
+          ]
+        },
+        {
+          "name": "RespChkTxn",
+          "item": [
+            {
+              "name": "RespChkTxn - Success",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T10:44:05.220+05:30\" orgId=\"700009\" msgId=\"BAN5t2Dk18UFMIMG7Ino6G12345678901234\" prodType=\"IMPS\"/>\n    <Txn id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\" note=\"Check Transaction Status\" refId=\"001279\" refUrl=\"https://www.npci.org.in/\" refCategory=\"00\" ts=\"2026-01-25T10:43:31.000+05:30\" type=\"ChkBankStatus\" orgMsgId=\"BAN5t2Dk05P35yQsq6cTn6123456789012345\" orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\" orgTxnDate=\"2026-01-25T10:43:31.000+05:30\" initiationMode=\"00\" purpose=\"00\" subType=\"PAY\" custRef=\"023113001279\"/>\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQsq6cTn6123456789012345\" result=\"SUCCESS\">\n        <Ref type=\"PAYEE\" seqNum=\"0\" addr=\"1111222233334444@ICIC0000001.ifsc.npci\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" acNum=\"1111222233334444\" regName=\"Sajid Mulla\" IFSC=\"ICIC0000001\" code=\"0000\" accType=\"SAVINGS\" approvalNum=\"111356\" respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/respchktxn/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "respchktxn", "{{txnId}}"]},
+                "description": "RespChkTxn success to NPCI Mock."
+              }
+            },
+            {
+              "name": "RespChkTxn - Final (NPCI to Remitter)",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T10:44:05+05:30\" orgId=\"NPCI\" msgId=\"BAN5t2Dk05P35yQsqeCRuJ12345678901234\" prodType=\"IMPS\"/>\n    <Txn id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\" note=\"Check Transaction Status\" refId=\"001279\" refUrl=\"https://www.npci.org.in/\" refCategory=\"00\" ts=\"2026-01-25T10:43:31.000+05:30\" type=\"ChkBankStatus\" orgMsgId=\"BAN5t2Dk18UFMIMG7zXPZV12345678901234\" orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\" orgTxnDate=\"2026-01-25T10:43:31.000+05:30\" initiationMode=\"00\" purpose=\"00\" subType=\"PAY\" custRef=\"023113001279\"/>\n    <Resp reqMsgId=\"BAN5t2Dk18UFMIMG7zXPZV12345678901234\" result=\"SUCCESS\">\n        <Ref type=\"PAYEE\" seqNum=\"0\" addr=\"1111222233334444@ICIC0000001.ifsc.npci\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" acNum=\"1111222233334444\" regName=\"Sajid Mulla\" IFSC=\"ICIC0000001\" code=\"0000\" accType=\"SAVINGS\" approvalNum=\"111356\" respCode=\"00\"/>\n        <Ref type=\"PAYER\" seqNum=\"1\" addr=\"{{orgId}}@psp\" settAmount=\"1000.00\" orgAmount=\"1000.00\" settCurrency=\"INR\" acNum=\"\" regName=\"Rugved Kharde\" IFSC=\"\" code=\"4814\" accType=\"SAVINGS\" approvalNum=\"APPROVED\" respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/respchktxn/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "respchktxn", "{{txnId}}"]},
+                "description": "Final RespChkTxn to NPCI Mock."
+              }
+            }
+          ]
+        },
+        {
+          "name": "RespHbt",
+          "item": [
+            {
+              "name": "RespHbt - Success",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\" ts=\"2026-01-25T10:30:01.000+05:30\" orgId=\"{{orgId}}\" msgId=\"RHBT12345678901234567890123456789012\"/>\n    <Txn id=\"HBT123456789012345678901234567890123\" note=\"Heartbeat Response\" refId=\"123456\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T10:30:00.000+05:30\" type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT12345678901234567890123456789012\" result=\"SUCCESS\"/>\n</upi:RespHbt>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resphbt/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resphbt", "{{txnId}}"]},
+                "description": "RespHbt success to NPCI Mock."
+              }
+            },
+            {
+              "name": "RespHbt - Failure",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\" ts=\"2026-01-25T10:30:01.000+05:30\" orgId=\"{{orgId}}\" msgId=\"RHBT12345678901234567890123456789012\"/>\n    <Txn id=\"HBT123456789012345678901234567890123\" note=\"Heartbeat Response\" refId=\"123456\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T10:30:00.000+05:30\" type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT12345678901234567890123456789012\" result=\"FAILURE\"/>\n</upi:RespHbt>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resphbt/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resphbt", "{{txnId}}"]},
+                "description": "RespHbt failure to NPCI Mock."
+              }
+            }
+          ]
+        },
+        {
+          "name": "RespListAccPvd",
+          "item": [
+            {
+              "name": "RespListAccPvd - List Providers",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\" ts=\"2026-01-25T23:45:45.000+05:30\" orgId=\"NPCI\" msgId=\"NPC4a69d250abe5423899c2f5a08fc0qw12X\"/>\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12X\" note=\"List Account Provider Fetch\" refId=\"123456\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T23:40:10.000+05:30\" type=\"ListAccPvd\"/>\n    <Resp reqMsgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12X\" result=\"SUCCESS\" errCode=\"00\"/>\n    <AccPvdList>\n        <AccPvd name=\"HDFC BANK LTD\" bankCode=\"HDF\" iin=\"5070\" ifsc=\"HDFC0000001|HDFC0000002|HDFC0000003\" active=\"Y\" url=\"www.hdfcbank.com\" spocName=\"HDFC SPOC\" spocEmail=\"spoc@hdfcbank.com\" spocPhone=\"9192939495\" prods=\"IMPS\" lastModifedTs=\"2026-01-20T10:00:00.000+05:30\" featureSupported=\"01\"/>\n        <AccPvd name=\"ICICI BANK LTD\" bankCode=\"ICI\" iin=\"5048\" ifsc=\"ICIC0000001|ICIC0000002\" active=\"Y\" url=\"www.icicibank.com\" prods=\"IMPS\" featureSupported=\"01\"/>\n    </AccPvdList>\n</ns2:RespListAccPvd>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/resplistaccpvd/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "resplistaccpvd", "{{txnId}}"]},
+                "description": "RespListAccPvd to NPCI Mock."
+              }
+            }
+          ]
+        },
+        {
+          "name": "RespValAdd",
+          "item": [
+            {
+              "name": "RespValAdd - Success",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRHagCNFH1234567890123456\" orgId=\"100155\" prodType=\"IMPS\" ts=\"2026-01-25T14:48:37.335+05:30\" ver=\"2.0\"/>\n    <Resp IFSC=\"ICIC0000001\" acNum=\"1111222233334444\" accType=\"SAVINGS\" approvalNum=\"051800\" code=\"0000\" maskName=\"Sajid Mulla\" reqMsgId=\"BAN5t2Dk05P35yVtrggPaK1234567890123456\" result=\"SUCCESS\" type=\"PERSON\"><FeatureSupported value=\"01\"/></Resp>\n    <Txn custRef=\"023314480540\" id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\" initiationMode=\"00\" note=\"Name Enquiry\" refId=\"860454\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T14:48:01.000+05:30\" type=\"NameEnq\"/>\n</ns2:RespValAdd>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/respvaladd/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "respvaladd", "{{txnId}}"]},
+                "description": "RespValAdd success to NPCI Mock."
+              }
+            },
+            {
+              "name": "RespValAdd - Failure",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Content-Type", "value": "application/xml"}, {"key": "Accept", "value": "application/xml"}],
+                "body": {"mode": "raw", "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRHagCNFH1234567890123456\" orgId=\"100155\" prodType=\"IMPS\" ts=\"2026-01-25T14:48:37.335+05:30\" ver=\"2.0\"/>\n    <Resp IFSC=\"ICIC0000001\" acNum=\"1111222233334444\" accType=\"DEFAULT\" approvalNum=\"\" code=\"U12\" maskName=\"\" reqMsgId=\"BAN5t2Dk05P35yVtrggPaK1234567890123456\" result=\"FAILURE\" type=\"PERSON\"/>\n    <Txn custRef=\"023314480540\" id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\" initiationMode=\"00\" note=\"Name Enquiry\" refId=\"860454\" refUrl=\"https://www.npci.org.in/\" ts=\"2026-01-25T14:48:01.000+05:30\" type=\"NameEnq\"/>\n</ns2:RespValAdd>"},
+                "url": {"raw": "{{npciMockBaseUrl}}/npci/respvaladd/{{txnId}}", "host": ["{{npciMockBaseUrl}}"], "path": ["npci", "respvaladd", "{{txnId}}"]},
+                "description": "RespValAdd failure to NPCI Mock. U12, U31 etc."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Switch - IMPS to Switch (Port 8082)",
+      "description": "IMPS sends requests to Mock Switch (port 8082). Dynamic path: /switch/{reqpay|reqchktxn|reqvaladd|reqhbt|reqlistaccpvd}/{txn_id}. Response requests (RespPay, RespChkTxn, etc.) simulate Switch sending back to IMPS at {{impsBaseUrl}}/switch/{resppay|respchktxn|...}/{txn_id}.\n\nUse account_master seed accounts for ReqPay: Payer 1234567890123456@HDFC0000001 or 9876543210987654@HDFC0000001, Payee 1111222233334444@ICIC0000001 or 5555666677778888@SBIN0000001.",
       "item": [
         {
           "name": "1. Pay APIs",
@@ -628,12 +535,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMFENLBga\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2A Fund Transfer\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMFENLBga1234567890123\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"P2A Fund Transfer\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"PAY\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqpay/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqpay/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqpay", "2.1"]
+                  "path": ["switch", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay to Switch – NPCI 6.1. Payer Rugved Kharde, Payee Sajid Mulla. 1000.00. Mock Switch debit/credit (00)."
               }
@@ -654,12 +561,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"5t2Dk05P35yQrXk0eCv\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Credit to Beneficiary\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"CREDIT\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqPay xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:30:00+05:30\"\n          orgId=\"NPCI\"\n          msgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn note=\"Credit to Beneficiary\"\n         custRef=\"023113001276\"\n         refId=\"001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         refCategory=\"00\"\n         type=\"CREDIT\"\n         purpose=\"00\"\n         initiationMode=\"00\"\n         id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Creds>\n            <Cred subType=\"NA\" type=\"PreApproved\">\n                <Data>MDB8QVBQUk9WRUQ</Data>\n            </Cred>\n        </Creds>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqPay>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqpay/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqpay/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqpay", "2.1"]
+                  "path": ["switch", "reqpay", "{{txnId}}"]
                 },
                 "description": "ReqPay CREDIT to Switch - Send XML or ISO. Mock Switch converts XML to ISO, logs."
               }
@@ -680,14 +587,14 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"41VdwjcZ9jaI4pifN\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQrXk0eCv\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"Sajid Mulla\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"111374\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN41VdwjcZ9jaI4pifN12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"Sajid Mulla\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"111374\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespPay>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/resppay/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "resppay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/resppay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "resppay", "{{txnId}}"]
                 },
-                "description": "RespPay to Switch - Send XML or ISO.\n\nContent-Type: application/xml (XML body below) OR application/octet-stream (ISO binary). Mock Switch converts XML to ISO, logs, and forwards ISO to IMPS Backend (http://localhost:8081/switch/resppay/2.1)."
+                "description": "RespPay to Switch - Send XML or ISO.\n\nContent-Type: application/xml (XML body below) OR application/octet-stream (ISO binary). Mock Switch converts XML to ISO, logs, and forwards ISO to IMPS Backend using dynamic path: http://localhost:8081/switch/resppay/{txnId}."
               }
             },
             {
@@ -706,12 +613,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"41VdwjcZ9jaI4pifN\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMFENLBgb\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQrXk0eCv\"\n          result=\"FAILURE\"\n          errCode=\"91\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"0.00\"\n             orgAmount=\"0.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"\"\n             respCode=\"91\"/>\n    </Resp>\n</ns2:RespPay>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespPay xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:31:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN41VdwjcZ9jaI4pifN12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"BAN5t2Dk18UFMIMFENLBgb1234567890123\"\n         note=\"Fund Transfer\"\n         refId=\"001276\"\n         custRef=\"023113001276\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         purpose=\"00\"\n         type=\"CREDIT\"\n         subType=\"PAY\"\n         initiationMode=\"00\"\n         refCategory=\"00\"/>\n\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQrXk0eCv12345678901234\"\n          result=\"FAILURE\"\n          errCode=\"91\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             regName=\"\"\n             acNum=\"1111222233334444\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             settAmount=\"0.00\"\n             orgAmount=\"0.00\"\n             settCurrency=\"INR\"\n             approvalNum=\"\"\n             respCode=\"91\"/>\n    </Resp>\n</ns2:RespPay>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/resppay/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "resppay", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/resppay/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "resppay", "{{txnId}}"]
                 },
                 "description": "RespPay Failure to Switch - Send XML or ISO.\n\nMock Switch converts XML to ISO and forwards to IMPS Backend. Common Response Codes: 91 (Issuer unavailable), 12 (Invalid transaction), 51 (Insufficient funds)."
               }
@@ -737,12 +644,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:03.976+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMG7zXPZV\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqChkTxn xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:03.976+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMG7zXPZV12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn custRef=\"023113001279\"\n         id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\"\n         initiationMode=\"00\"\n         note=\"Check Transaction Status\"\n         orgRrn=\"023113001279\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\"\n         purpose=\"00\"\n         refCategory=\"00\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         subType=\"PAY\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"VR\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           name=\"Rugved Kharde\"\n           seqNum=\"1\"\n           type=\"ENTITY\"\n           code=\"4814\">\n\n        <Info>\n            <Identity id=\"1234567890123456|HDFC0000001\"\n                      type=\"ACCOUNT\"\n                      verifiedName=\"Rugved Kharde\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"MOBILE\" value=\"919494916511\"/>\n            <Tag name=\"LOCATION\" value=\"\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n            <Tag name=\"cardAccpTrId\" value=\"NPC16511\"/>\n            <Tag name=\"cardAccIdCode\" value=\"\"/>\n        </Device>\n\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"ACNUM\" value=\"1234567890123456\"/>\n            <Detail name=\"IFSC\" value=\"HDFC0000001\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n\n        <Amount value=\"1000.00\" curr=\"INR\"/>\n    </Payer>\n\n    <Payees>\n        <Payee seqNum=\"0\" type=\"PERSON\" code=\"0000\">\n            <Amount value=\"1000.00\" curr=\"INR\"/>\n            <Ac addrType=\"ACCOUNT\">\n                <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n                <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n                <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            </Ac>\n        </Payee>\n    </Payees>\n</ns2:ReqChkTxn>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqchktxn/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqchktxn/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqchktxn", "2.1"]
+                  "path": ["switch", "reqchktxn", "{{txnId}}"]
                 },
                 "description": "ReqChkTxn to Switch – NPCI 7.1. Payer Rugved Kharde, Payee Sajid Mulla."
               }
@@ -763,12 +670,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:05.220+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"5t2Dk18UFMIMG7Ino6G\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"NPCI000000005t2Dk18UFMIMG7zXPZX\"\n         note=\"Check Transaction Status\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         refCategory=\"00\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"ChkBankStatus\"\n         orgMsgId=\"5t2Dk05P35yQsq6cTn6\"\n         orgTxnId=\"NPCI000000005t2Dk18UFMIMG40acxy\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         initiationMode=\"00\"\n         purpose=\"00\"\n         subType=\"PAY\"\n         custRef=\"023113001279\"/>\n\n    <Resp reqMsgId=\"5t2Dk05P35yQsq6cTn6\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             acNum=\"1111222233334444\"\n             regName=\"Sajid Mulla\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             approvalNum=\"111356\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespChkTxn xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T10:44:05.220+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"BAN5t2Dk18UFMIMG7Ino6G12345678901234\"\n          prodType=\"IMPS\"/>\n\n    <Txn id=\"BAN5t2Dk18UFMIMG7zXPZX12345678901234\"\n         note=\"Check Transaction Status\"\n         refId=\"001279\"\n         refUrl=\"https://www.npci.org.in/\"\n         refCategory=\"00\"\n         ts=\"2026-01-25T10:43:31.000+05:30\"\n         type=\"ChkBankStatus\"\n         orgMsgId=\"BAN5t2Dk05P35yQsq6cTn6123456789012345\"\n         orgTxnId=\"BAN5t2Dk18UFMIMG40acxy12345678901234\"\n         orgTxnDate=\"2026-01-25T10:43:31.000+05:30\"\n         initiationMode=\"00\"\n         purpose=\"00\"\n         subType=\"PAY\"\n         custRef=\"023113001279\"/>\n\n    <Resp reqMsgId=\"BAN5t2Dk05P35yQsq6cTn6123456789012345\"\n          result=\"SUCCESS\">\n        <Ref type=\"PAYEE\"\n             seqNum=\"0\"\n             addr=\"1111222233334444@ICIC0000001.ifsc.npci\"\n             settAmount=\"1000.00\"\n             orgAmount=\"1000.00\"\n             settCurrency=\"INR\"\n             acNum=\"1111222233334444\"\n             regName=\"Sajid Mulla\"\n             IFSC=\"ICIC0000001\"\n             code=\"0000\"\n             accType=\"SAVINGS\"\n             approvalNum=\"111356\"\n             respCode=\"00\"/>\n    </Resp>\n</ns2:RespChkTxn>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/respchktxn/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "respchktxn", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/respchktxn/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "respchktxn", "{{txnId}}"]
                 },
                 "description": "RespChkTxn to Switch - Send XML or ISO. Mock Switch converts to ISO and forwards to IMPS Backend."
               }
@@ -794,12 +701,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"HBT123456789012345678901234567890\"/>\n    <Txn id=\"HBT123456789012345678901234567890\"\n         note=\"Heartbeat Check\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"ALIVE\" value=\"NA\"/>\n</upi:ReqHbt>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:ReqHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:00.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"HBT123456789012345678901234567890123\"/>\n    <Txn id=\"HBT123456789012345678901234567890123\"\n         note=\"Heartbeat Check\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <HbtMsg type=\"ALIVE\" value=\"NA\"/>\n</upi:ReqHbt>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqhbt/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqhbt/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqhbt", "2.1"]
+                  "path": ["switch", "reqhbt", "{{txnId}}"]
                 },
                 "description": "ReqHbt to Switch - Send XML (application/xml) or ISO. Mock Switch converts XML to ISO, logs."
               }
@@ -820,12 +727,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:01.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"RHBT12345678901234567890123456789\"/>\n    <Txn id=\"HBT123456789012345678901234567890\"\n         note=\"Heartbeat Response\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT123456789012345678901234567890\"\n          result=\"SUCCESS\"/>\n</upi:RespHbt>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\">\n    <Head ver=\"1.0\"\n          ts=\"2026-01-25T10:30:01.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"RHBT12345678901234567890123456789012\"/>\n    <Txn id=\"HBT123456789012345678901234567890123\"\n         note=\"Heartbeat Response\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T10:30:00.000+05:30\"\n         type=\"Hbt\"/>\n    <Resp reqMsgId=\"HBT12345678901234567890123456789012\"\n          result=\"SUCCESS\"/>\n</upi:RespHbt>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/resphbt/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "resphbt", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/resphbt/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "resphbt", "{{txnId}}"]
                 },
                 "description": "RespHbt to Switch - Send XML or ISO. Mock Switch converts to ISO and forwards to IMPS Backend."
               }
@@ -851,12 +758,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:40:15.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12\"/>\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n</ns2:ReqListAccPvd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:40:15.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12X\"/>\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12X\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n</ns2:ReqListAccPvd>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqlistaccpvd/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqlistaccpvd/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqlistaccpvd", "2.1"]
+                  "path": ["switch", "reqlistaccpvd", "{{txnId}}"]
                 },
                 "description": "ReqListAccPvd to Switch - Send XML or ISO. Mock Switch converts XML to ISO, logs."
               }
@@ -877,12 +784,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:45:45.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"NPC4a69d250abe5423899c2f5a08fc0qw12\"/>\n\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n\n    <Resp reqMsgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12\"\n          result=\"SUCCESS\"\n          errCode=\"00\"/>\n\n    <AccPvdList>\n        <AccPvd name=\"HDFC BANK LTD\"\n                bankCode=\"HDF\"\n                iin=\"5070\"\n                ifsc=\"HDFC0000001|HDFC0000002\"\n                active=\"Y\"\n                url=\"www.hdfcbank.com\"\n                spocName=\"HDFC SPOC\"\n                spocEmail=\"spoc@hdfcbank.com\"\n                spocPhone=\"9192939495\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-20T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n    </AccPvdList>\n</ns2:RespListAccPvd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\">\n    <Head ver=\"2.0\"\n          ts=\"2026-01-25T23:45:45.000+05:30\"\n          orgId=\"{{orgId}}\"\n          msgId=\"NPC4a69d250abe5423899c2f5a08fc0qw12X\"/>\n\n    <Txn id=\"PNB4a69d250abe6433899c2f5e7dad71c12X\"\n         note=\"List Account Provider Fetch\"\n         refId=\"123456\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T23:40:10.000+05:30\"\n         type=\"ListAccPvd\"/>\n\n    <Resp reqMsgId=\"PNB4a69d250abe6433899c2f5a08fc0qw12X\"\n          result=\"SUCCESS\"\n          errCode=\"00\"/>\n\n    <AccPvdList>\n        <AccPvd name=\"HDFC BANK LTD\"\n                bankCode=\"HDF\"\n                iin=\"5070\"\n                ifsc=\"HDFC0000001|HDFC0000002\"\n                active=\"Y\"\n                url=\"www.hdfcbank.com\"\n                spocName=\"HDFC SPOC\"\n                spocEmail=\"spoc@hdfcbank.com\"\n                spocPhone=\"9192939495\"\n                prods=\"IMPS\"\n                lastModifedTs=\"2026-01-20T10:00:00.000+05:30\"\n                featureSupported=\"01\"/>\n    </AccPvdList>\n</ns2:RespListAccPvd>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/resplistaccpvd/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "resplistaccpvd", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/resplistaccpvd/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "resplistaccpvd", "{{txnId}}"]
                 },
                 "description": "RespListAccPvd to Switch - Send XML or ISO. Mock Switch converts to ISO and forwards to IMPS Backend."
               }
@@ -908,12 +815,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRH8K84fV\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry Request\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:ReqValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRH8K84fV1234567890123\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:23.373+05:30\"\n          ver=\"2.0\"/>\n\n    <Txn custRef=\"023314480540\"\n         id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry Request\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n\n    <Payer addr=\"{{orgId}}@psp\"\n           code=\"4814\"\n           name=\"ENQUIRER NAME\"\n           seqNum=\"1\"\n           type=\"ENTITY\">\n\n        <Info>\n            <Identity id=\"12110100020142|HDFC0000001\"\n                      type=\"BANK\"\n                      verifiedName=\"ENQUIRER NAME\"/>\n            <Rating verifiedAddress=\"TRUE\"/>\n        </Info>\n\n        <Device>\n            <Tag name=\"cardAccpTrId\" value=\"DNB67667\"/>\n            <Tag name=\"cardAccIdCode\" value=\"DNB917667667667\"/>\n            <Tag name=\"MOBILE\" value=\"917667667667\"/>\n            <Tag name=\"LOCATION\" value=\"HDFC BANK MOB7667667667IN\"/>\n            <Tag name=\"TYPE\" value=\"MOB\"/>\n        </Device>\n\n        <Ac addrType=\"MOBILE\">\n            <Detail name=\"MMID\" value=\"4002111\"/>\n            <Detail name=\"MOBNUM\" value=\"919494916511\"/>\n            <Detail name=\"ACTYPE\" value=\"SAVINGS\"/>\n        </Ac>\n    </Payer>\n\n    <Payee code=\"0000\" seqNum=\"0\" type=\"PERSON\">\n        <Ac addrType=\"ACCOUNT\">\n            <Detail name=\"IFSC\" value=\"ICIC0000001\"/>\n            <Detail name=\"ACNUM\" value=\"1111222233334444\"/>\n            <Detail name=\"ACTYPE\" value=\"DEFAULT\"/>\n        </Ac>\n    </Payee>\n</ns2:ReqValAdd>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/reqvaladd/2.1",
+                  "raw": "{{switchBaseUrl}}/switch/reqvaladd/{{txnId}}",
                   "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "reqvaladd", "2.1"]
+                  "path": ["switch", "reqvaladd", "{{txnId}}"]
                 },
                 "description": "ReqValAdd to Switch - Send XML or ISO. Mock Switch converts XML to ISO, logs."
               }
@@ -934,12 +841,12 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"5t2Dk18UFMIRHagCNFH\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:37.335+05:30\"\n          ver=\"2.0\"/>\n\n    <Resp IFSC=\"ICIC0000001\"\n          acNum=\"1111222233334444\"\n          accType=\"SAVINGS\"\n          approvalNum=\"051800\"\n          code=\"0000\"\n          maskName=\"Sajid Mulla\"\n          reqMsgId=\"5t2Dk05P35yVtrggPaK\"\n          result=\"SUCCESS\"\n          type=\"PERSON\">\n        <FeatureSupported value=\"01\"/>\n    </Resp>\n\n    <Txn custRef=\"023314480540\"\n         id=\"NPCI000000005t2Dk18UFMIRH8K84fW\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n</ns2:RespValAdd>"
+                  "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ns2:RespValAdd xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\">\n    <Head msgId=\"BAN5t2Dk18UFMIRHagCNFH1234567890123456\"\n          orgId=\"{{orgId}}\"\n          prodType=\"IMPS\"\n          ts=\"2026-01-25T14:48:37.335+05:30\"\n          ver=\"2.0\"/>\n\n    <Resp IFSC=\"ICIC0000001\"\n          acNum=\"1111222233334444\"\n          accType=\"SAVINGS\"\n          approvalNum=\"051800\"\n          code=\"0000\"\n          maskName=\"Sajid Mulla\"\n          reqMsgId=\"BAN5t2Dk05P35yVtrggPaK1234567890123456\"\n          result=\"SUCCESS\"\n          type=\"PERSON\">\n        <FeatureSupported value=\"01\"/>\n    </Resp>\n\n    <Txn custRef=\"023314480540\"\n         id=\"BAN5t2Dk18UFMIRH8K84fW1234567890123\"\n         initiationMode=\"00\"\n         note=\"Name Enquiry\"\n         refId=\"860454\"\n         refUrl=\"https://www.npci.org.in/\"\n         ts=\"2026-01-25T14:48:01.000+05:30\"\n         type=\"NameEnq\"/>\n</ns2:RespValAdd>"
                 },
                 "url": {
-                  "raw": "{{switchBaseUrl}}/switch/respvaladd/2.1",
-                  "host": ["{{switchBaseUrl}}"],
-                  "path": ["switch", "respvaladd", "2.1"]
+                  "raw": "{{impsBaseUrl}}/switch/respvaladd/{{txnId}}",
+                  "host": ["{{impsBaseUrl}}"],
+                  "path": ["switch", "respvaladd", "{{txnId}}"]
                 },
                 "description": "RespValAdd to Switch - Send XML or ISO. Mock Switch converts to ISO and forwards to IMPS Backend."
               }
@@ -958,8 +865,8 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{npciBaseUrl}}/reference",
-              "host": ["{{npciBaseUrl}}"],
+              "raw": "{{impsBaseUrl}}/reference",
+              "host": ["{{impsBaseUrl}}"],
               "path": ["reference"]
             },
             "description": "**RESPONSE CODES REFERENCE (This is not an actual API)**\n\n**Success Codes:**\n- 00 - Transaction Successful\n\n**Failure Codes:**\n- U12 - Invalid/Incorrect payee account number\n- U14 - Invalid/Incorrect payee MMID\n- U30 - Beneficiary bank not available\n- U31 - Invalid beneficiary IFSC\n- U48 - Transaction not permitted to card holder\n- U51 - Insufficient funds\n- U66 - Device fingerprint mismatch\n- U68 - Credentials not present\n- U78 - Transaction Declined\n- 91 - Issuer unavailable\n- 12 - Invalid transaction\n- 51 - Insufficient funds\n- 96 - System malfunction\n\n**Account Types (ACTYPE):**\n- SAVINGS\n- CURRENT\n- DEFAULT\n- NRE\n- NRO\n- CREDIT\n- PPIWALLET\n- BANKWALLET\n- SOD\n- UOD\n- SEMICLOSEDPPIWALLET\n- SEMICLOSEDBANKWALLET\n- SNRR\n\n**Transaction Types:**\n- PAY - Debit from Payer\n- CREDIT - Credit to Payee\n- VR - Verification Request (ChkTxn)\n- NameEnq - Name Enquiry\n- ValAdd - Address Validation\n- Hbt - Heartbeat\n- ListAccPvd - List Account Providers\n\n**Initiation Modes:**\n- 00 - Default (Mobile)\n- 12 - FIR (Foreign Inward Remittance)\n\n**Device Types:**\n- MOB - Mobile\n- WAP - WAP\n- IVR - IVR\n- ATM - ATM\n- BRC - Branch\n- MAT - Mobile Assisted Transaction\n- SMS - SMS\n\n**Institution Routes (for FIR):**\n- MTSS - Money Transfer Service Scheme\n- RDA - Rupee Drawing Arrangement\n\n**RefCategory Values:**\n- 00 - NULL\n- 01 - Advertisement\n- 02 - Invoice\n- 03-09 - Reserved"

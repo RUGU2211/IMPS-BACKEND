@@ -20,42 +20,52 @@ server:
   port: 8081
 
 # ===========================================
-# ROUTING CONFIGURATION
+# ROUTING CONFIGURATION (dynamic - no hardcoding)
 # ===========================================
+# All URLs/hosts/ports must come from here. Change only this file for different environments.
+# REST (current):
+#   NPCI → IMPS:  {server.port}/imps/{reqpay|...}/{txn_id}
+#   IMPS → Switch: routing.switch.base-url
+#   Switch → IMPS: {server.port}/switch/{resppay|...}/{txn_id}
+#   IMPS → NPCI:   routing.npci.base-url
 routing:
-  # NPCI Side - XML Format (Mock Client on port 8083)
   npci:
     base-url: http://localhost:8083
     endpoints:
-      # Request endpoints (NPCI sends requests here)
-      reqpay: /npci/reqpay/2.1
-      reqchktxn: /npci/reqchktxn/2.1
-      reqhbt: /npci/reqhbt/2.1
-      reqlistaccpvd: /npci/reqlistaccpvd/2.1
-      reqvaladd: /npci/reqvaladd/2.1
-      # Response endpoints (App sends responses here)
-      resppay: /npci/resppay/2.1
-      respchktxn: /npci/respchktxn/2.1
-      resphbt: /npci/resphbt/2.1
-      resplistaccpvd: /npci/resplistaccpvd/2.1
-      respvaladd: /npci/respvaladd/2.1
+      ack: /npci/ack
 
-  # Switch Side - ISO Format (Mock Switch on port 8082)
   switch:
     base-url: http://localhost:8082
-    endpoints:
-      # Request endpoints (App sends ISO requests here)
-      reqpay: /switch/reqpay/2.1
-      reqchktxn: /switch/reqchktxn/2.1
-      reqhbt: /switch/reqhbt/2.1
-      reqlistaccpvd: /switch/reqlistaccpvd/2.1
-      reqvaladd: /switch/reqvaladd/2.1
-      # Response endpoints (Switch sends ISO responses here)
-      resppay: /switch/resppay/2.1
-      respchktxn: /switch/respchktxn/2.1
-      resphbt: /switch/resphbt/2.1
-      resplistaccpvd: /switch/resplistaccpvd/2.1
-      respvaladd: /switch/respvaladd/2.1
+
+# ===========================================
+# SOCKET-BASED IMPS (future) - all from config
+# ===========================================
+# When switching to TCP sockets: no hardcoded host/port in code.
+# Server: IMPS listens for NPCI/Switch inbound (bind 0.0.0.0 in UAT/prod, not localhost).
+# Client: IMPS connects to NPCI/Switch (use server IP or hostname in UAT/prod).
+# Persistent connections; ACK and responses on same socket; multi-threading per plan.
+socket:
+  enabled: false
+  server:
+    bind-host: 0.0.0.0
+    npci:
+      port: 9083
+    switch:
+      port: 9082
+  client:
+    npci:
+      host: localhost
+      port: 8083
+    switch:
+      host: localhost
+      port: 8082
+  threading:
+    acceptor-threads: 1
+    io-pool-size: 10
+    processing-pool-size: 20
+  framing:
+    length-prefix-bytes: 4
+    encoding: UTF-8
 
 # ===========================================
 # API VERSION

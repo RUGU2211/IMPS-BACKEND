@@ -12,6 +12,10 @@ spring:
     url: jdbc:postgresql://localhost:5432/imps_db
     username: postgres
     password: root
+    hikari:
+      # Run housekeeper more often to avoid "thread starvation or clock leap" warnings
+      # (e.g. when machine sleeps or pool is briefly busy)
+      housekeeping-run-interval: 10000  # 10s (default 30s)
 
   jpa:
     hibernate:
@@ -25,16 +29,25 @@ spring:
 
 # ===========================================
 # IMPS BACKEND ROUTING (to send responses)
+# Dynamic paths only: /switch/<type>/{txnId}. Do not use /2.1.
 # ===========================================
 imps:
   backend:
     base-url: http://localhost:8081
     endpoints:
-      resppay: /switch/resppay/2.1
-      respchktxn: /switch/respchktxn/2.1
-      resphbt: /switch/resphbt/2.1
-      resplistaccpvd: /switch/resplistaccpvd/2.1
-      respvaladd: /switch/respvaladd/2.1
+      resppay: /switch/resppay
+      respchktxn: /switch/respchktxn
+      resphbt: /switch/resphbt
+      resplistaccpvd: /switch/resplistaccpvd
+      respvaladd: /switch/respvaladd
+
+# ===========================================
+# LOGGING (optional: set to ERROR to hide HikariCP housekeeper warning)
+# The "thread starvation or clock leap" warning is harmless (e.g. machine sleep or brief load).
+# ===========================================
+logging:
+  level:
+    com.zaxxer.hikari.pool.HikariPool: WARN   # set to ERROR to suppress housekeeper delta warning
 
 # ===========================================
 # MOCK SWITCH CONFIGURATION (auto-response only)

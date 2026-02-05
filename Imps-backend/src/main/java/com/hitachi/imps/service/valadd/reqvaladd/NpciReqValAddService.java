@@ -39,7 +39,17 @@ public class NpciReqValAddService {
     @Async
     public void processAsync(String xml) {
         try {
-            process(xml);
+            process(xml, null);
+        } catch (Exception e) {
+            System.err.println("NpciReqValAddService ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId) {
+        try {
+            process(xml, pathTxnId);
         } catch (Exception e) {
             System.err.println("NpciReqValAddService ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -48,11 +58,14 @@ public class NpciReqValAddService {
 
     @Transactional
     public void process(String xml) {
+        process(xml, null);
+    }
+
+    @Transactional
+    public void process(String xml, String pathTxnId) {
         String msgId = xmlParsingService.extractMsgId(xml);
-        String txnId = xmlParsingService.extractTxnId(xml);
-        if (txnId == null || txnId.isBlank()) {
-            txnId = msgId;
-        }
+        String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
+        if (txnId == null || txnId.isBlank()) txnId = msgId;
 
         // 1. Audit incoming XML
         auditService.saveRaw(msgId, "NPCI_REQVALADD_XML_IN", xml);
@@ -92,7 +105,10 @@ public class NpciReqValAddService {
                 ISOMsg iso = xmlToIsoConverter.convertReqValAdd(xml);
                 auditService.saveParsed(msgId, "SWITCH_REQVALADD_ISO_OUT", iso);
                 printIso(iso);
-                switchClient.sendReqValAdd(iso);
+                System.out.println("reqvaladd/" + txnId + " send to switch");
+                byte[] switchResp = switchClient.sendReqValAdd(iso, txnId);
+                if (switchResp != null)
+                    System.out.println("switch ack receive of reqvaladd/" + txnId);
                 transactionService.markIsoSent(txn);
                 return; // Response will come from Switch
             }
@@ -142,7 +158,7 @@ public class NpciReqValAddService {
             </ns2:RespValAdd>
             """.formatted(
                 OffsetDateTime.now(),
-                UUID.randomUUID().toString().replace("-", "").substring(0, 20),
+                "RSP" + UUID.randomUUID().toString().replace("-", "").substring(0, 32), // Rule 021: 35 chars
                 OffsetDateTime.now(),
                 reqMsgId,
                 ifsc,
@@ -166,7 +182,7 @@ public class NpciReqValAddService {
             </ns2:RespValAdd>
             """.formatted(
                 OffsetDateTime.now(),
-                UUID.randomUUID().toString().replace("-", "").substring(0, 20),
+                "RSP" + UUID.randomUUID().toString().replace("-", "").substring(0, 32), // Rule 021: 35 chars
                 reqMsgId,
                 respCode
             );

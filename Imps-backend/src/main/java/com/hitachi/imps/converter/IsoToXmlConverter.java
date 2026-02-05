@@ -31,8 +31,9 @@ public class IsoToXmlConverter {
 
     public String convertReqPayToXml(ISOMsg iso) {
         try {
-            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021/022: msgId and Txn id 35 chars (3 BPC + 32)
+            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String amount = paiseToRupees(iso.getString(4));
             String payerAc = iso.getString(102);
             String payeeAc = iso.getString(103);
@@ -82,46 +83,58 @@ public class IsoToXmlConverter {
         return convertRespPayToXml(iso);
     }
 
+    /**
+     * Build RespPay XML per NPCI spec tables:
+     * 1. API: RespPay, xmlns (1..1)
+     * 2. Head: ver(1-6), ts(Max255), orgId(Max20), msgId(Length35), prodType=IMPS
+     * 4. Txn: id(35), note(Max50), refId(Max35), refUrl(Max35), ts(Max255), type(Max20), subType(0..1,Max20), initiationMode(Max3), refCategory(Max2)
+     * 5.1 Resp: reqMsgId(35), result(Max20), errCode(if failed, Max20)
+     * 5.2 Ref: type, seqNum(Max3), addr(Max255), settAmount(totalDigits15), settCurrency(3), approvalNum(6), respCode(Max20), regName(Max99), orgAmount(totalDigits15), reversalRespCode(Max20), acNum(Max30), code(4), IFSC(11), accType
+     */
     public String convertRespPayToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            String ts = RespPaySpec.truncate(OffsetDateTime.now().toString(), RespPaySpec.HEAD_TS_MAX);
+            // Rule 021: Head msgId 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
             String result = "00".equals(responseCode) ? "SUCCESS" : "FAILURE";
-            String approvalNum = iso.getString(38);
-            String amount = paiseToRupees(iso.getString(4));
-            String acNum = iso.getString(103);
-            String ifsc = iso.getString(33);
+            result = RespPaySpec.truncate(result, RespPaySpec.RESP_RESULT_MAX);
+            String approvalNum = RespPaySpec.exactLen(iso.getString(38), RespPaySpec.REF_APPROVALNUM_LEN, '0');
+            if (approvalNum.isEmpty()) approvalNum = "000000";
+            String amount = RespPaySpec.amountWithinDigits(paiseToRupees(iso.getString(4)), RespPaySpec.REF_SETTAMOUNT_TOTALDIGITS);
+            String acNum = RespPaySpec.truncate(iso.getString(103), RespPaySpec.REF_ACNUM_MAX);
+            String ifsc = RespPaySpec.exactLen(iso.getString(33), RespPaySpec.REF_IFSC_LEN, ' ');
+            String txnId = RespPaySpec.exactLen(iso.getString(37), RespPaySpec.TXN_ID_LEN, '0');
+            String reqMsgId = RespPaySpec.exactLen(iso.getString(11), RespPaySpec.RESP_REQMSGID_LEN, '0');
+            String orgId = RespPaySpec.truncate("SWITCH", RespPaySpec.HEAD_ORGID_MAX);
+            String addr = RespPaySpec.truncate(acNum + "@bank.ifsc.npci", RespPaySpec.REF_ADDR_MAX);
+            String regName = RespPaySpec.truncate("BENEFICIARY", RespPaySpec.REF_REGNAME_MAX);
+            String respCode = RespPaySpec.truncate(responseCode != null ? responseCode : "00", RespPaySpec.REF_RESPCODE_MAX);
 
             return """
                 <ns2:RespPay xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
-                    <Txn id="%s" note="Response" type="CREDIT" ts="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
+                    <Txn id="%s" note="Response" refId="" refUrl="" ts="%s" type="CREDIT" subType="PAY" initiationMode="API" refCategory="00"/>
                     <Resp reqMsgId="%s" result="%s">
                         <Ref type="PAYEE" seqNum="1"
                              addr="%s"
                              settAmount="%s"
                              orgAmount="%s"
                              settCurrency="INR"
-                             acNum="%s"
-                             IFSC="%s"
-                             code="0000"
-                             accType="SAVINGS"
                              approvalNum="%s"
                              respCode="%s"
-                             regName="BENEFICIARY"/>
+                             regName="%s"
+                             reversalRespCode=""
+                             acNum="%s"
+                             code="0000"
+                             IFSC="%s"
+                             accType="SAVINGS"/>
                     </Resp>
                 </ns2:RespPay>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
-                    iso.getString(37), OffsetDateTime.now(),
-                    iso.getString(11),
-                    result,
-                    acNum != null ? acNum + "@bank.ifsc.npci" : "",
-                    amount, amount,
-                    acNum != null ? acNum : "",
-                    ifsc != null ? ifsc : "",
-                    approvalNum != null ? approvalNum : "000000",
-                    responseCode != null ? responseCode : "00"
+                    NAMESPACE.length() > RespPaySpec.XMLNS_MAX ? NAMESPACE.substring(0, RespPaySpec.XMLNS_MAX) : NAMESPACE,
+                    RespPaySpec.truncate(API_VERSION, RespPaySpec.HEAD_VER_MAX), ts, orgId, msgId, RespPaySpec.PRODTYPE_FIXED,
+                    txnId, ts, reqMsgId, result, addr, amount, amount, approvalNum, respCode, regName, acNum, ifsc
                 );
         } catch (Exception e) {
             throw new RuntimeException("ISO to RespPay XML conversion failed", e);
@@ -138,8 +151,9 @@ public class IsoToXmlConverter {
 
     public String convertReqChkTxnToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
-            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021/022: 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String orgTxnId = iso.getString(48);
             String orgRrn = iso.getString(37);
             String amount = paiseToRupees(iso.getString(4));
@@ -172,7 +186,8 @@ public class IsoToXmlConverter {
 
     public String convertRespChkTxnToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021: Head msgId 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
             String result = "00".equals(responseCode) ? "SUCCESS" : "FAILURE";
             String approvalNum = iso.getString(38);
@@ -214,8 +229,9 @@ public class IsoToXmlConverter {
 
     public String convertReqHbtToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
-            String txnId = "HBT" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+            // Rule 021/022: 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+            String txnId = "HBT" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String hbtType = iso.getString(48);
 
             return """
@@ -244,7 +260,8 @@ public class IsoToXmlConverter {
 
     public String convertRespHbtToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021: Head msgId 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
             String result = "00".equals(responseCode) ? "SUCCESS" : "FAILURE";
 
@@ -274,8 +291,9 @@ public class IsoToXmlConverter {
 
     public String convertReqValAddToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
-            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021/022: 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+            String txnId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String acNum = iso.getString(102);
             String ifsc = iso.getString(33);
 
@@ -313,7 +331,8 @@ public class IsoToXmlConverter {
 
     public String convertRespValAddToXml(ISOMsg iso) {
         try {
-            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+            // Rule 021: Head msgId 35 chars
+            String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
             String result = "00".equals(responseCode) ? "SUCCESS" : "FAILURE";
             String acNum = iso.getString(102);
@@ -351,7 +370,8 @@ public class IsoToXmlConverter {
     }
 
     public String convertRespListAccPvdToXml(ISOMsg iso) {
-        String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        // Rule 021: Head msgId 35 chars
+        String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
 
         return """
             <ns2:RespListAccPvd xmlns:ns2="%s">

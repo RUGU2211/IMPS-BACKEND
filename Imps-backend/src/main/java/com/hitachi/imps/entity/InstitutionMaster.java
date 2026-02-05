@@ -34,8 +34,24 @@ public class InstitutionMaster {
     @Column(name = "name")
     private String name;
 
-	@Column(name = "active", nullable = false)
+    @Column(name = "active", nullable = false)
     private Boolean active;
+
+    /* 7.4.3 AccPvd optional (0..n) */
+    @Column(name = "url", length = 500)
+    private String url;
+
+    @Column(name = "spoc_name", length = 100)
+    private String spocName;
+
+    @Column(name = "spoc_email", length = 100)
+    private String spocEmail;
+
+    @Column(name = "spoc_phone", length = 20)
+    private String spocPhone;
+
+    @Column(name = "last_modified_ts")
+    private java.time.OffsetDateTime lastModifiedTs;
 
     /* ===== GETTERS & SETTERS ===== */
     public Boolean getActive() {
@@ -71,4 +87,19 @@ public class InstitutionMaster {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getUrl() { return url; }
+    public void setUrl(String url) { this.url = url; }
+
+    public String getSpocName() { return spocName; }
+    public void setSpocName(String spocName) { this.spocName = spocName; }
+
+    public String getSpocEmail() { return spocEmail; }
+    public void setSpocEmail(String spocEmail) { this.spocEmail = spocEmail; }
+
+    public String getSpocPhone() { return spocPhone; }
+    public void setSpocPhone(String spocPhone) { this.spocPhone = spocPhone; }
+
+    public java.time.OffsetDateTime getLastModifiedTs() { return lastModifiedTs; }
+    public void setLastModifiedTs(java.time.OffsetDateTime lastModifiedTs) { this.lastModifiedTs = lastModifiedTs; }
 }
