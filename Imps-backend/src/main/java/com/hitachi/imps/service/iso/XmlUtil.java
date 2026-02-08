@@ -120,6 +120,7 @@ public class XmlUtil {
         tags.put("orgRrn", read(xml, "//*[local-name()='Txn']/@orgRrn"));
         tags.put("orgTxnDate", read(xml, "//*[local-name()='Txn']/@orgTxnDate"));
         tags.put("amount", read(xml, "//*[local-name()='Amount']/@value"));
+        tags.put("payee_ifsc", read(xml, "//*[local-name()='Payee']//*[local-name()='Detail'][@name='IFSC']/@value"));
 
         return tags;
     }

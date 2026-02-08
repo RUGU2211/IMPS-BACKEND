@@ -20,3 +20,8 @@ bin/
 # OS
 .DS_Store
 Thumbs.db
+
+# SSL keystores (run certs/generate-certs.bat or .sh to create)
+certs/*.jks
+certs/*.cer
+/.metadata/

@@ -96,6 +96,14 @@ public class XmlParsingService {
     }
 
     /* =========================================================
+       GENERIC HELPER - Extract orgId (request_org_id from Head)
+       Used for institution_master lookup → switch_ip, switch_port
+       ========================================================= */
+    public String extractOrgId(String xml) {
+        return xmlUtil.read(xml, "//*[local-name()='Head']/@orgId");
+    }
+
+    /* =========================================================
        HEARTBEAT API - ReqHbt (NPCI SYSTEM MONITORING)
        ========================================================= */
     public Map<String, String> parseReqHbt(String xml) {

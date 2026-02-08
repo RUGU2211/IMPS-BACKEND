@@ -11,6 +11,7 @@ import java.util.UUID;
 
 /**
  * Converter for transforming ISO 8583 messages to NPCI XML format.
+ * Output formats must follow NPCI_IMPS_Message_Formats.md (project root).
  * Supports all IMPS API types: RespPay, RespChkTxn, RespHbt, RespValAdd, RespListAccPvd
  */
 @Component
@@ -229,10 +230,9 @@ public class IsoToXmlConverter {
 
     public String convertReqHbtToXml(ISOMsg iso) {
         try {
-            // Rule 021/022: 35 chars
+            String txnId = iso.hasField(120) ? iso.getString(120) : ("HBT" + UUID.randomUUID().toString().replace("-", "").substring(0, 32));
             String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
-            String txnId = "HBT" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
-            String hbtType = iso.getString(48);
+            String hbtType = iso.hasField(48) ? iso.getString(48) : "ALIVE";
 
             return """
                 <upi:ReqHbt xmlns:upi="%s">
@@ -243,7 +243,7 @@ public class IsoToXmlConverter {
                 """.formatted(
                     NAMESPACE, OffsetDateTime.now(), msgId,
                     txnId, OffsetDateTime.now(),
-                    hbtType != null ? hbtType : "ALIVE"
+                    hbtType
                 );
         } catch (Exception e) {
             throw new RuntimeException("ISO to ReqHbt XML conversion failed", e);
@@ -260,25 +260,31 @@ public class IsoToXmlConverter {
 
     public String convertRespHbtToXml(ISOMsg iso) {
         try {
-            // Rule 021: Head msgId 35 chars
             String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
             String result = "00".equals(responseCode) ? "SUCCESS" : "FAILURE";
+            String txnId = iso.hasField(120) ? iso.getString(120) : (iso.hasField(37) ? iso.getString(37) : "");
+            String note = iso.hasField(48) ? escapeXmlAttr(iso.getString(48)) : "Heartbeat Response";
 
             return """
                 <upi:RespHbt xmlns:upi="%s">
                     <Head ver="1.0" ts="%s" orgId="SWITCH" msgId="%s"/>
-                    <Txn id="%s" note="Heartbeat Response" refId="" refUrl="" ts="%s" type="Hbt"/>
+                    <Txn id="%s" note="%s" refId="" refUrl="" ts="%s" type="Hbt"/>
                     <Resp reqMsgId="%s" result="%s"/>
                 </upi:RespHbt>
                 """.formatted(
                     NAMESPACE, OffsetDateTime.now(), msgId,
-                    iso.getString(37), OffsetDateTime.now(),
-                    iso.getString(11), result
+                    txnId, note, OffsetDateTime.now(),
+                    iso.hasField(11) ? iso.getString(11) : "", result
                 );
         } catch (Exception e) {
             throw new RuntimeException("ISO to RespHbt XML conversion failed", e);
         }
+    }
+
+    private static String escapeXmlAttr(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     /* ===============================

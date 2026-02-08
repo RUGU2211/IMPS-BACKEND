@@ -1,6 +1,8 @@
 package com.hitachi.imps.service;
 
 import java.time.LocalDateTime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +17,8 @@ import com.hitachi.imps.repository.TransactionRepository;
 
 @Service
 public class TransactionService {
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionService.class);
 
     /** switch_status values: INIT → ISO_SENT → SUCCESS | FAILED */
     public static final String STATUS_INIT = "INIT";
@@ -60,7 +64,9 @@ public class TransactionService {
         txn.setReqXml(reqXml);
         txn.setReqInDateTime(now());
         txn.setSwitchStatus(STATUS_INIT);
-        return repo.save(txn);
+        TransactionEntity saved = repo.save(txn);
+        log.info("[IMPS] transaction created txnId={} type={} | message_audit_log entries will follow", txnId, txn.getTxnType());
+        return saved;
     }
 
     /* ===============================
@@ -81,6 +87,11 @@ public class TransactionService {
             String approvalNumber,
             String settlementDate) {
 
+        // For HBT/LISTACCPVD (no Switch), req_out_date_time = send time of resp from IMPS to NPCI
+        if (txn.getReqOutDateTime() == null && ("HBT".equals(txn.getTxnType()) || "LISTACCPVD".equals(txn.getTxnType()))) {
+            txn.setReqOutDateTime(now());
+        }
+
         txn.setSwitchStatus(STATUS_SUCCESS);
         txn.setApprovalNumber(approvalNumber);   // DE38
         txn.setRespXml(respXml);
@@ -88,6 +99,7 @@ public class TransactionService {
         txn.setRespOutDateTime(LocalDateTime.now());  // when response is finalized/sent out
 
         repo.save(txn);   // ✅ FIXED
+        log.info("[IMPS] transaction SUCCESS txnId={} type={}", txn.getTxnId(), txn.getTxnType());
     }
 
     /* ===============================
@@ -110,6 +122,7 @@ public class TransactionService {
         txn.setRespOutDateTime(LocalDateTime.now());  // when response is finalized/sent out
 
         repo.save(txn);
+        log.info("[IMPS] transaction FAILURE txnId={} type={}", txn.getTxnId(), txn.getTxnType());
     }
 
 

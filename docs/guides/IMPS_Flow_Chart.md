@@ -1,0 +1,179 @@
+# IMPS System – Flow Chart
+
+## 1. High-Level Components
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│  NPCI /         │     │  IMPS Backend    │     │  mock_switch    │     │  mock_npci       │
+│  PowerShell     │────▶│  HTTP 8081       │────▶│  HTTP 8082      │     │  HTTP 8083       │
+│  (XML)          │     │  Socket 9083     │◀────│  Socket 9084    │     │  Socket 9085     │
+└─────────────────┘     │  (XML ↔ ISO)     │     │  (ISO)          │     │  (Resp receiver) │
+                        └──────────────────┘     └─────────────────┘     └──────────────────┘
+```
+
+**Default: Socket mode.** NPCI → IMPS 9083 (XML), IMPS → Switch 9084 (ISO). REST (HTTP) optional.
+
+---
+
+## 2. Socket Flow – ACK-First
+
+**npci.compliant-flow: true (default):** NPCI-compliant. ACK on request socket; Resp on new outbound socket to mock_npci:9085.
+
+```
+                    [4 bytes][XML] – ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  IMPS BACKEND (Socket 9083)                                                                │
+│  1. Receive XML → Send ACK immediately (same socket) → NPCI closes                         │
+│  2. Audit, create/update transaction + message_audit_log (switch_status = INIT)            │
+│  3. Convert XML → ISO (XmlToIsoConverter)                                                  │
+│  4. Connect to Switch 9084, send [4 bytes][ISO]                                            │
+│  5. Receive [4 bytes][Resp ISO] on same Switch socket                                      │
+│  6. Connect to mock_npci:9085 (npci.socket), send [4 bytes][Resp XML], read ACK, close     │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    [4 bytes][ISO] to mock_switch:9084
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  MOCK SWITCH (Socket 9084)                                                                 │
+│  1. Receive [4 bytes][ISO] → Parse, validate                                               │
+│  2. Build response ISO (RespPay 0210, RespChkTxn 0210, RespHbt 0810, RespValAdd 0210,      │
+│     RespListAccPvd 0210)                                                                   │
+│  3. Send [4 bytes][Resp ISO] on same socket                                                │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Compliant flow:** Client reads **once** (ACK). Resp sent by IMPS on new connection to mock_npci:9085.  
+**Legacy (npci.compliant-flow: false):** Client reads twice (ACK, then Resp on same socket).
+
+---
+
+## 3. ACK Flow (Full 8 Steps)
+
+| Step | From | To | Message | Format |
+|------|------|-----|---------|--------|
+| 1 | NPCI | IMPS | Req | XML |
+| 2 | IMPS | NPCI | ACK | XML |
+| 3 | IMPS | Switch | Req | ISO |
+| 4 | Switch | IMPS | ACK | ISO |
+| 5 | Switch | IMPS | Resp | ISO |
+| 6 | IMPS | Switch | ACK | ISO |
+| 7 | IMPS | NPCI | Resp | XML |
+| 8 | NPCI | IMPS | ACK | XML |
+
+---
+
+## 4. HTTP Flow (Optional – REST Mode)
+
+When `routing.switch.rest.enabled: true`, IMPS uses HTTP instead of socket to Switch. **All paths under /imps** (no /switch path).
+
+```
+                    POST /imps/reqpay/{txnId} (XML)
+                    POST /imps/reqchktxn/{txnId}
+                    POST /imps/reqhbt/{txnId}
+                    POST /imps/reqvaladd/{txnId}
+                    POST /imps/reqlistaccpvd/{txnId}
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  IMPS BACKEND (HTTP 8081)                                                                  │
+│  1. Receive XML → Audit, create txn (INIT), log to transaction + message_audit_log         │
+│  2. Convert XML → ISO                                                                      │
+│  3. POST ISO to mock_switch http://localhost:8082/imps/reqpay/{txnId} (octet-stream)       │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    POST to Switch 8082 /imps/* (ISO)
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  MOCK SWITCH (HTTP 8082)                                                                   │
+│  1. Receive ISO → Log, validate                                                            │
+│  2. Build response ISO                                                                     │
+│  3. POST to IMPS Backend http://localhost:8081/imps/resppay/{txnId}, etc.                  │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    POST /imps/resppay/{txnId} (ISO)
+                    POST /imps/respchktxn/{txnId}
+                    ...
+                                    │
+                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│  IMPS BACKEND                                                                              │
+│  1. Receive ISO → Convert to XML, update transaction (markSuccess/markFailure)             │
+│  2. Log to message_audit_log                                                               │
+│  3. (Optional) POST XML to mock_npci http://localhost:8083                                  │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. Transaction Table – Status Flow
+
+```
+  ┌─────────┐       markIsoSent()        ┌─────────────┐      Response received
+  │  INIT   │ ────────────────────────▶ │  ISO_SENT   │ ──────────────────────▶
+  └─────────┘   (req sent to switch)     └─────────────┘   (DE120 found, update txn)
+        │                                        │
+        │ createRequest(txnId, xml, txnType)    │
+        │ PAY | CHKTXN | HBT | VALADD |         │    markSuccess()     ┌───────────┐
+        │ LISTACCPVD                            └─────────────────────▶│  SUCCESS  │
+        │                                        │                      └───────────┘
+        │                                        │    markFailure()     ┌───────────┐
+        │                                        └─────────────────────▶│  FAILED   │
+        │                                                               └───────────┘
+```
+
+| Column              | When set |
+|---------------------|----------|
+| req_in_date_time    | createRequest() |
+| req_out_date_time   | markIsoSent() |
+| resp_in_date_time   | markSuccess() / markFailure() |
+| resp_out_date_time  | markSuccess() / markFailure() |
+| resp_xml            | markSuccess(txn, xml, ...) / markFailure(txn, xml) |
+| switch_status       | INIT → ISO_SENT → SUCCESS \| FAILED |
+
+---
+
+## 6. API Types – End-to-End Flow
+
+| API          | NPCI → IMPS (Socket 9083) | IMPS → Switch (Socket 9084) | Switch response      |
+|--------------|---------------------------|-----------------------------|----------------------|
+| ReqPay       | [4 bytes][XML]            | [4 bytes][ISO]              | RespPay 0210         |
+| ReqChkTxn    | [4 bytes][XML]            | [4 bytes][ISO]              | RespChkTxn 0210      |
+| ReqHbt       | [4 bytes][XML]            | Switch→IMPS: POST /imps/reqhbt (ISO) | RespHbt 0810 (ISO, DE39/DE48) |
+| ReqValAdd    | [4 bytes][XML]            | [4 bytes][ISO]              | RespValAdd 0210      |
+| ReqListAccPvd| [4 bytes][XML]            | [4 bytes][ISO] (or local)   | RespListAccPvd 0210  |
+
+**ReqHbt:** NPCI→IMPS (XML): IMPS responds with bank status. Switch→IMPS (ISO): mock_switch POSTs every 3 min; IMPS returns RespHbt ISO (DE39, DE48). **ReqListAccPvd:** Can be handled locally. ReqPay, ReqChkTxn, ReqValAdd require mock_switch.
+
+**HTTP mode:** NPCI → POST /imps/reqpay/{txnId} (XML); Switch → POST /imps/resppay/{txnId} (ISO).
+
+---
+
+## 7. Ports Summary
+
+| Service           | HTTP Port | Socket Port | Role |
+|-------------------|-----------|-------------|------|
+| IMPS Backend      | 8081      | 9083        | NPCI XML ↔ Switch ISO; socket server (default) |
+| mock_switch       | 8082      | 9084        | Receives ISO; returns [4 bytes][Resp ISO] on same socket |
+| mock_npci         | 8083      | 9085        | Receives Resp from IMPS (when npci.compliant-flow: true) |
+
+---
+
+## 8. One-Line Flow (ReqPay – Socket)
+
+**Compliant flow (npci.compliant-flow: true):**
+```
+NPCI (ReqPay XML) → IMPS 9083 → [ACK] → NPCI closes
+→ IMPS [XML→ISO, connect Switch 9084] → mock_switch 9084 [Resp ISO]
+→ IMPS converts ISO→XML, opens NEW socket to mock_npci:9085 → sends Resp → reads ACK → closes
+```
+
+---
+
+## 9. References
+
+- [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md) – Protocol, ACK flow, PowerShell APIs
+- [PROJECT_CONNECTIONS.md](../PROJECT_CONNECTIONS.md) – Ports, config, database

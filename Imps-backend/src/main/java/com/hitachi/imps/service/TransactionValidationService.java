@@ -6,25 +6,21 @@ import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.entity.AccountMaster;
 import com.hitachi.imps.entity.InstitutionMaster;
 import com.hitachi.imps.entity.TransactionEntity;
-import com.hitachi.imps.repository.AccountMasterRepository;
 import com.hitachi.imps.repository.InstitutionMasterRepository;
 import com.hitachi.imps.repository.TransactionRepository;
 
 /**
  * Transaction Validation Service
- * Validates transactions after receiving RespPay from Switch
+ * Validates transactions after receiving RespPay from Switch.
+ * account_master validation done in Switch only – not here.
  */
 @Service
 public class TransactionValidationService {
 
     @Autowired
     private TransactionRepository transactionRepository;
-
-    @Autowired
-    private AccountMasterRepository accountMasterRepository;
 
     @Autowired
     private InstitutionMasterRepository institutionMasterRepository;
@@ -103,34 +99,13 @@ public class TransactionValidationService {
                 System.out.println("⚠ Could not extract STAN");
             }
 
-            // 5. Validate Payee Account (if available in ISO)
-            String payeeAccount = null;
-            String payeeIfsc = null;
-            try {
-                if (iso.hasField(103)) {
-                    payeeAccount = iso.getString(103);
-                }
-                if (iso.hasField(33)) {
-                    payeeIfsc = iso.getString(33);
-                }
-                
-                if (payeeAccount != null && payeeIfsc != null) {
-                    Optional<AccountMaster> accountOpt = accountMasterRepository
-                        .findByAccountNumberAndIfscCodeAndAccountStatusAndImpsEnabled(payeeAccount, payeeIfsc, "ACTIVE", "Y");
-                    
-                    if (accountOpt.isPresent()) {
-                        System.out.println("✓ Payee Account Valid: " + accountOpt.get().getAccountHolderName());
-                        result.addValidation("PAYEE_ACCOUNT", "VALID", accountOpt.get().getAccountHolderName());
-                    } else {
-                        System.out.println("⚠ Payee Account Not Found: " + payeeAccount + "@" + payeeIfsc);
-                        result.addValidation("PAYEE_ACCOUNT", "NOT_FOUND", payeeAccount + "@" + payeeIfsc);
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println("⚠ Could not validate payee account: " + e.getMessage());
-            }
+            // 5. Payee Account validation done in Switch (account_master) – not here.
 
             // 6. Validate Institution via institution_master (IMPS validation table)
+            String payeeIfsc = null;
+            try {
+                if (iso.hasField(33)) payeeIfsc = iso.getString(33);
+            } catch (Exception e) { /* ignore */ }
             if (payeeIfsc != null) {
                 Optional<InstitutionMaster> institutionOpt = institutionMasterRepository
                     .findByIfscCode(payeeIfsc);

@@ -1,0 +1,78 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: mock-switch
+
+  # ===========================================
+  # DATABASE CONFIGURATION - switch_db (Switch only: account_master)
+  # ===========================================
+  datasource:
+    url: jdbc:postgresql://localhost:5432/switch_db
+    username: postgres
+    password: root
+    hikari:
+      # Run housekeeper more often to avoid "thread starvation or clock leap" warnings
+      # (e.g. when machine sleeps or pool is briefly busy)
+      housekeeping-run-interval: 10000  # 10s (default 30s)
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+# ===========================================
+# IMPS BACKEND ROUTING (to send responses)
+# Extract imps_ip and imps_port to build API URL for sending requests to IMPS.
+# Dynamic paths: /imps/{resptype}/{txnId}. No /switch path.
+# ===========================================
+imps:
+  imps_ip: localhost
+  imps_port: 8081   # IMPS HTTP port
+  endpoints:
+    resppay: /imps/resppay
+    respchktxn: /imps/respchktxn
+    resphbt: /imps/resphbt
+    resplistaccpvd: /imps/resplistaccpvd
+    respvaladd: /imps/respvaladd
+
+# ===========================================
+# LOGGING (optional: set to ERROR to hide HikariCP housekeeper warning)
+# The "thread starvation or clock leap" warning is harmless (e.g. machine sleep or brief load).
+# ===========================================
+logging:
+  level:
+    com.zaxxer.hikari.pool.HikariPool: WARN   # set to ERROR to suppress housekeeper delta warning
+
+# ===========================================
+# SOCKET SERVER (TCP – length-prefixed ISO) – DEFAULT
+# IMPS connects; Switch receives [4-byte length][ISO], responds [4-byte length][ISO] on same connection.
+# REST optional: server.port 8082 when rest.enabled: true
+# ===========================================
+socket:
+  enabled: true
+  ssl-enabled: false   # true: listen on ssl-port (9444) with TLS
+  server:
+    bind-host: 0.0.0.0
+    port: 9084
+    ssl-port: 9444
+  ssl:
+    key-store: file:../certs/switch-keystore.jks
+    key-store-password: IMPS-Backend
+
+# ===========================================
+# MOCK SWITCH CONFIGURATION (auto-response only)
+# ===========================================
+mock:
+  # Auto-respond: automatically send response after receiving request
+  auto-respond: true
+  # Response delay in milliseconds (simulate processing time)
+  response-delay-ms: 500
+  # Default response result
+  default-result: SUCCESS

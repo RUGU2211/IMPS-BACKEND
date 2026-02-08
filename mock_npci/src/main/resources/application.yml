@@ -1,0 +1,23 @@
+server:
+  port: 8083
+
+# ===========================================
+# SOCKET SERVER (TCP – length-prefixed XML) – DEFAULT
+# IMPS connects; NPCI mock receives [4-byte length][XML] (RespPay, RespHbt, etc.) and logs to console.
+# REST optional: server.port 8083 when rest.enabled: true
+# ===========================================
+socket:
+  enabled: true
+  ssl-enabled: false   # true: listen on ssl-port (9445) with TLS
+  server:
+    bind-host: 0.0.0.0
+    port: 9085
+    ssl-port: 9445
+  ssl:
+    key-store: file:../certs/npci-keystore.jks
+    key-store-password: IMPS-Backend
+
+spring:
+  application:
+    name: mock-npci
+  # No database: NPCI Mock Client is stateless (receives XML, returns ACK)

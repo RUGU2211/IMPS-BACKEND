@@ -1,7 +1,12 @@
 package com.hitachi.imps.service.heartbeat;
 
-import java.time.OffsetDateTime;
+import java.net.Socket;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,84 +14,181 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hitachi.imps.entity.InstitutionMaster;
+import com.hitachi.imps.entity.TransactionEntity;
 import com.hitachi.imps.repository.InstitutionMasterRepository;
-import com.hitachi.imps.service.ImpsIdGeneratorService;
+import com.hitachi.imps.service.TransactionService;
+import com.hitachi.imps.service.audit.MessageAuditService;
 
 /**
- * Sends outbound ReqHbt (ALIVE) to NPCI on a fixed schedule – one request per enrolled bank.
- *
- * Every 3 minutes, fetches all active institutions from public.institution_master
- * and sends one separate ReqHbt per bank. New banks added later are picked up automatically.
- *
- * Heartbeat Rule: System must generate heartbeat messages every 3 minutes per bank.
+ * IMPS Internal: TCP ping to each bank switch every 3 min. Updates institution_master.active.
+ * By default (no ReqHbt from NPCI/Switch) console shows: which banks UP, which DOWN, contact details.
+ * Manual ReqHbt (socket, HTTP, SSL) triggers full flow: DB check, response, log to transaction + message_audit_log.
  */
 @Service
-@ConditionalOnProperty(prefix = "imps.heartbeat", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "imps.heartbeat", name = "switch-check-enabled", havingValue = "true", matchIfMissing = true)
 public class HeartbeatSchedulerService {
 
     private static final Logger log = LoggerFactory.getLogger(HeartbeatSchedulerService.class);
+    private static final int CONNECT_TIMEOUT_MS = 3000;
+    private static final DateTimeFormatter TXN_ID_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired
-    private NpciMockClient npciMockClient;
-
+    private InstitutionMasterRepository institutionRepo;
     @Autowired
-    private ImpsIdGeneratorService idGenerator;
-
+    private TransactionService transactionService;
     @Autowired
-    private InstitutionMasterRepository institutionMasterRepository;
+    private MessageAuditService auditService;
 
     /**
-     * Send ALIVE heartbeat to NPCI every 3 minutes – one ReqHbt per active bank in institution_master.
-     * Dynamic: new banks get heartbeats automatically on next run.
+     * Check switch connectivity for each institution (all, including active=false).
+     * Down banks are re-checked every interval; recovery sets active=true.
      */
     @Scheduled(
-        initialDelayString = "${imps.heartbeat.initial-delay-ms:15000}",
-        fixedDelayString = "${imps.heartbeat.interval-ms:180000}"
+        initialDelayString = "${imps.heartbeat.switch-check-initial-delay-ms:10000}",
+        fixedDelayString = "${imps.heartbeat.switch-check-interval-ms:180000}"
     )
-    public void sendScheduledHeartbeat() {
-        List<InstitutionMaster> banks = institutionMasterRepository.findByActiveTrue();
-        if (banks == null || banks.isEmpty()) {
-            log.warn("No active institutions in institution_master – skipping heartbeat run");
+    @Transactional
+    public void checkSwitchConnectivity() {
+        List<InstitutionMaster> all = institutionRepo.findAll();
+        if (all == null || all.isEmpty()) {
+            log.info("[Switch Check] No institutions in institution_master – skipping");
             return;
         }
 
-        log.info("Sending ReqHbt (ALIVE) to NPCI for {} enrolled bank(s)", banks.size());
-        String ts = OffsetDateTime.now().toString();
+        String txnId = "SWITCH_CHECK_" + LocalDateTime.now().format(TXN_ID_FMT);
+        List<Map<String, Object>> banksToCheck = new ArrayList<>();
+        for (InstitutionMaster inst : all) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", inst.getId());
+            m.put("name", inst.getName());
+            m.put("request_org_id", inst.getRequestOrgId());
+            m.put("switch_ip", inst.getSwitchIp() != null ? inst.getSwitchIp() : "localhost");
+            m.put("switch_port", inst.getSwitchPort() != null ? inst.getSwitchPort() : "9084");
+            banksToCheck.add(m);
+        }
+        String reqJson = buildJson(Map.of("banks", banksToCheck, "checked_at", LocalDateTime.now().toString()));
+        TransactionEntity txn = transactionService.createRequest(txnId, reqJson, "SWITCH_CHECK");
 
-        for (InstitutionMaster inst : banks) {
-            String bankName = inst.getName() != null ? inst.getName() : inst.getBankCode();
-            String bpc = ImpsIdGeneratorService.normalizeBpc(inst.getBankCode());
-            String orgIdForBank = (inst.getRequestOrgId() != null && !inst.getRequestOrgId().isBlank())
-                ? inst.getRequestOrgId()
-                : (inst.getBankCode() != null ? inst.getBankCode() : "BANK");
+        log.info("[IMPS Switch Check] Checking connectivity for {} bank(s) (every 3 min)...", all.size());
+        int upCount = 0;
+        int downCount = 0;
+        List<Map<String, Object>> upBanks = new ArrayList<>();
+        List<Map<String, Object>> downBanks = new ArrayList<>();
+        Map<String, Object> contactDetails = new LinkedHashMap<>();
 
-            String msgId = idGenerator.generateMsgId(bpc);
-            String txnId = idGenerator.generateTxnId(bpc);
+        for (InstitutionMaster inst : all) {
+            String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp().trim() : "localhost";
+            int port = parsePort(inst.getSwitchPort(), 9084);
+            String addr = host + ":" + port;
+            ConnectResult result = tryConnect(host, port);
+            boolean reachable = result.success;
+            boolean wasActive = Boolean.TRUE.equals(inst.getActive());
 
-            String reqHbtXml = """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/">
-                    <Head ver="1.0" ts="%s" orgId="%s" msgId="%s"/>
-                    <Txn id="%s" note="Heartbeat Check" refId="ALIVE" refUrl="https://www.npci.org.in/" ts="%s" type="Hbt"/>
-                    <HbtMsg type="ALIVE" value="NA"/>
-                </upi:ReqHbt>
-                """.formatted(ts, orgIdForBank, msgId, txnId, ts).trim();
+            String name = inst.getName() != null ? inst.getName() : "";
+            String orgId = inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "";
+            String contact = formatContactDetails(inst);
 
-            try {
-                log.debug("Sending ReqHbt for bank {} (orgId={}, msgId={})", bankName, orgIdForBank, msgId);
-                String response = npciMockClient.sendReqHbt(reqHbtXml, txnId);
+            if (reachable) {
+                upCount++;
+                upBanks.add(Map.of("name", name, "request_org_id", orgId, "address", addr));
+            } else {
+                downCount++;
+                downBanks.add(Map.of("name", name, "request_org_id", orgId, "address", addr,
+                    "reason", result.errorMessage != null ? result.errorMessage : "unknown",
+                    "contact", contact.isEmpty() ? "N/A" : contact));
+                contactDetails.put(orgId, Map.of("name", name, "spoc", contact));
+            }
 
-                if (response == null || response.isBlank()) {
-                    log.error("No heartbeat response from NPCI for bank {}. msgId={}", bankName, msgId);
-                } else {
-                    log.info("Heartbeat response received for bank {}, msgId={}", bankName, msgId);
-                }
-            } catch (Exception e) {
-                log.error("Heartbeat send failed for bank {}. msgId={}, error={}", bankName, msgId, e.getMessage(), e);
+            inst.setActive(reachable);
+            if (reachable != wasActive) {
+                institutionRepo.save(inst);
+            }
+
+            if (reachable) {
+                log.info("[IMPS] BANK UP: {} ({}) at {} | To contact: {}", name, orgId, addr, contact.isEmpty() ? "N/A" : contact);
+            } else {
+                log.info("[IMPS] BANK DOWN: {} ({}) at {} | Reason: {} | To contact: {}",
+                    name, orgId, addr, result.errorMessage != null ? result.errorMessage : "unknown",
+                    contact.isEmpty() ? "N/A" : contact);
             }
         }
+
+        log.info("[IMPS Switch Check] Complete: {} UP, {} DOWN", upCount, downCount);
+
+        // Log to transaction and message_audit_log
+        String respJson = buildJson(Map.of(
+            "up_count", upCount,
+            "down_count", downCount,
+            "up_banks", upBanks,
+            "down_banks", downBanks,
+            "contact_details", contactDetails,
+            "overall_status", downCount == 0 ? "SUCCESS" : "FAILED"
+        ));
+        if (downCount == 0) {
+            transactionService.markSuccess(txn, respJson, null, null);
+        } else {
+            transactionService.markFailure(txn, respJson);
+        }
+        auditService.saveRaw(txnId, "SWITCH_CHECK_RESULT", respJson);
+    }
+
+    private String buildJson(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            return "{\"error\":\"" + e.getMessage() + "\"}";
+        }
+    }
+
+    private static class ConnectResult {
+        boolean success;
+        String errorMessage;
+    }
+
+    private ConnectResult tryConnect(String host, int port) {
+        if (host == null || host.isBlank()) host = "localhost";
+        ConnectResult r = new ConnectResult();
+        try (Socket s = new Socket()) {
+            s.connect(new java.net.InetSocketAddress(host.trim(), port), CONNECT_TIMEOUT_MS);
+            r.success = true;
+            return r;
+        } catch (Exception e) {
+            r.success = false;
+            r.errorMessage = e.getClass().getSimpleName() + ": " + (e.getMessage() != null ? e.getMessage() : "connection failed");
+            return r;
+        }
+    }
+
+    private static int parsePort(String s, int defaultPort) {
+        if (s == null || s.isBlank()) return defaultPort;
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return defaultPort;
+        }
+    }
+
+    private static String formatContactDetails(InstitutionMaster inst) {
+        StringBuilder sb = new StringBuilder();
+        if (inst.getSpocName() != null && !inst.getSpocName().isBlank()) sb.append("spoc=").append(inst.getSpocName());
+        if (inst.getSpocEmail() != null && !inst.getSpocEmail().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append("email=").append(inst.getSpocEmail());
+        }
+        if (inst.getSpocPhone() != null && !inst.getSpocPhone().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append("phone=").append(inst.getSpocPhone());
+        }
+        if (inst.getUrl() != null && !inst.getUrl().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append("url=").append(inst.getUrl());
+        }
+        return sb.toString();
     }
 }

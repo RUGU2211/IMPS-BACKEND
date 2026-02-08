@@ -12,12 +12,9 @@ import com.hitachi.imps.repository.InstitutionMasterRepository;
 import com.hitachi.imps.spec.NpciReqPayRules;
 
 /**
- * Generates msgId and txn_id per Rule 021 and 022:
- * - Total length 35 characters.
- * - First 3 = Bank Participation Code (BPC) from public.institution_master.
- * - Remaining 32 = unique id (UUID-based alphanumeric).
- *
- * reqMsgId / Txn id format: &lt;BPC 3 chars&gt; + &lt;32 alphanumeric&gt;.
+ * Generates msgId and txn_id for outbound flows only (e.g. IMPS-originated heartbeat).
+ * Inbound: txn_id and msg_id must come from NPCI in the API request; IMPS validates (Rule 021/022) and uses them for the whole flow until txn success/failure. No random generation for inbound.
+ * Format: BPC (3 chars) + 32 alphanumeric.
  */
 @Service
 public class ImpsIdGeneratorService {

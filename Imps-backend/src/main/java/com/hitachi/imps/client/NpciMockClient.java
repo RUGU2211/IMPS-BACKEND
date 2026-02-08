@@ -10,8 +10,7 @@ import org.springframework.web.client.RestTemplate;
 import com.hitachi.imps.config.RoutingConfig;
 
 /**
- * Client for sending XML messages to NPCI Mock Client (port 8083).
- * Replaces NpciClient - all NPCI communication now goes through mock client.
+ * Client for sending XML messages to NPCI Mock (REST, localhost testing).
  */
 @Component
 public class NpciMockClient {
@@ -110,9 +109,6 @@ public class NpciMockClient {
         }
     }
 
-    /**
-     * Build dynamic NPCI URL: http://localhost:8083/npci/{resppay|respchktxn|...}/{txn_id}
-     */
     private String sendToNpciDynamic(String apiType, String txnId, String xml) {
         if (txnId == null || txnId.isBlank()) return null;
         try {

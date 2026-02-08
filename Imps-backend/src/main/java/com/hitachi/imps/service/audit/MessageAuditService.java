@@ -5,6 +5,11 @@ import java.util.Base64;
 
 import org.jpos.iso.ISOMsg;
 import org.jpos.iso.ISOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.hitachi.imps.iso.ImpsIsoPackager;
+import com.hitachi.imps.util.IsoUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +19,8 @@ import com.hitachi.imps.repository.MessageAuditLogRepository;
 
 @Service
 public class MessageAuditService {
+
+    private static final Logger logger = LoggerFactory.getLogger(MessageAuditService.class);
 
     @Autowired
     private MessageAuditLogRepository repo;
@@ -60,6 +67,7 @@ public class MessageAuditService {
         log.setCreatedAt(LocalDateTime.now());
 
         repo.save(log);
+        logger.debug("[IMPS] message_audit_log txnId={} stage={}", txnId, stage);
     }
 
     /* ===============================
@@ -76,6 +84,28 @@ public class MessageAuditService {
         log.setCreatedAt(LocalDateTime.now());
 
         repo.save(log);
+        logger.debug("[IMPS] message_audit_log txnId={} stage={}", txnId, stage);
+    }
+
+    /* ===============================
+       ISO BYTES – PARSED ONLY (MTI=0210, DE3=...)
+       Use for SWITCH_*_ISO_IN. raw_message = null; parsed_message has human-readable format.
+       =============================== */
+    public void saveRawBytesWithParsed(String txnId, String stage, byte[] data) {
+        MessageAuditLog entity = new MessageAuditLog();
+        entity.setTxnId(txnId);
+        entity.setStage(stage);
+        entity.setRawMessage(null);
+        try {
+            ISOMsg iso = IsoUtil.unpack(data, new ImpsIsoPackager());
+            entity.setParsedMessage(isoToString(iso));
+        } catch (Exception e) {
+            logger.debug("Could not parse ISO for audit parsed_message: {}", e.getMessage());
+            entity.setParsedMessage(null);
+        }
+        entity.setCreatedAt(LocalDateTime.now());
+        repo.save(entity);
+        logger.debug("[IMPS] message_audit_log txnId={} stage={}", txnId, stage);
     }
 
     /* ===============================
@@ -100,6 +130,7 @@ public class MessageAuditService {
             log.setCreatedAt(LocalDateTime.now());
 
             repo.save(log);
+            logger.debug("[IMPS] message_audit_log txnId={} stage={}", txnId, stage);
 
         } catch (Exception e) {
             throw new RuntimeException("Audit save failed", e);

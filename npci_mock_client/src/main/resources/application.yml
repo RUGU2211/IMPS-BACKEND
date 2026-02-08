@@ -1,7 +1,0 @@
-server:
-  port: 8083
-
-spring:
-  application:
-    name: npci-mock-client
-  # No database: NPCI Mock Client is stateless (receives XML, returns ACK)

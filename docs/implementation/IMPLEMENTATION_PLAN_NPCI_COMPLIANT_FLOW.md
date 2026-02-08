@@ -1,0 +1,297 @@
+# IMPS End-to-End Implementation Plan – NPCI-Compliant Socket Flow
+
+**Status: IMPLEMENTED** (as of current project state)
+
+**Target Architecture:** Socket-to-socket, ISO to Switch, new connections everywhere, NPCI-compliant.
+
+**Document Purpose:** Implementation roadmap and reference for the NPCI-compliant flow. Phases A–E are implemented. See [PROJECT_CONNECTIONS](../PROJECT_CONNECTIONS.md) and [SOCKET_GUIDE](../socket/SOCKET_GUIDE.md) for current usage.
+
+---
+
+## 1. Systems Involved
+
+```
+NPCI  ⇄  IMPS  ⇄  SWITCH (ISO 8583)
+```
+
+| Link | Protocol | Format |
+|------|----------|--------|
+| NPCI ↔ IMPS | TCP socket | XML (NPCI schema) |
+| IMPS ↔ Switch | TCP socket | ISO 8583 |
+| Every message | New connection | - |
+| ACK | Same connection | - |
+| txn_id | End-to-end | Same across all systems |
+
+---
+
+## 2. Configuration Sources (Target vs Current)
+
+### 2.1 NPCI Connection
+
+**Target (from spec):**
+
+| Config | Usage | Source |
+|--------|-------|--------|
+| `npci.socket.host` | Where IMPS sends Resp to NPCI | Config file |
+| `npci.socket.port` | NPCI listening port | Config file |
+
+**Current:**
+- `routing.npci.base-url` – REST/HTTP (e.g. `http://localhost:8083`)
+- No `npci.socket.host` / `npci.socket.port` for outbound socket
+
+**Gap:** Need `npci.socket.host` and `npci.socket.port` for Phase 3 (IMPS → NPCI outbound).
+
+---
+
+### 2.2 Switch Connection
+
+**Target (from spec):**
+
+| Source | Column | Usage |
+|--------|--------|-------|
+| `institution_master` | switch_ip, switch_port, active | IMPS → Switch |
+
+**Current:**
+- ✅ `SwitchAddressResolver` uses `institution_master`
+- ✅ Fallback to `routing.switch.socket.host/port`
+
+**Gap:** None. Already aligned.
+
+---
+
+## 3. Target Flow (Step-by-Step)
+
+### Phase 1: NPCI → IMPS (Request)
+
+| Step | Actor | Action |
+|------|-------|--------|
+| 1 | NPCI | Opens NEW socket to IMPS |
+| 2 | NPCI | Sends `[4-byte length][XML]` (ReqPay/ReqHbt/etc.) |
+| 3 | IMPS | Sends ACK on **same** socket |
+| 4 | NPCI | **Closes** connection |
+
+**Critical:** After ACK, the request connection is closed. IMPS does **not** send Resp on this connection.
+
+---
+
+### Phase 2: IMPS → Switch (Processing)
+
+| Step | Actor | Action |
+|------|-------|--------|
+| 5 | IMPS | Looks up `institution_master` by orgId |
+| 6 | IMPS | Opens NEW socket to switch_ip:switch_port |
+| 7 | IMPS | Sends `[4-byte length][ISO]` |
+| 8 | Switch | Replies `[4-byte length][ISO 0210/0810]` on **same** socket |
+| 9 | IMPS | Closes switch connection |
+
+**Current:** `SocketSwitchClient` already does new connection per request, ISO format. ✅
+
+---
+
+### Phase 3: IMPS → NPCI (Response)
+
+| Step | Actor | Action |
+|------|-------|--------|
+| 10 | IMPS | Opens **NEW** socket to NPCI (npci.socket.host:npci.socket.port) |
+| 11 | IMPS | Sends `[4-byte length][RespPay/RespHbt XML]` |
+| 12 | NPCI | Sends ACK on **same** socket |
+| 13 | IMPS | Closes connection |
+
+**Current:** IMPS sends Resp on the **same** connection as the request (via `PendingSocketResponseStore`). No outbound socket client to NPCI.
+
+**Gap:** Need outbound NPCI socket client and Phase 1 change (ACK-only, close).
+
+---
+
+## 4. Gap Analysis Summary
+
+| Component | Target | Current | Gap |
+|-----------|--------|---------|-----|
+| Phase 1 (Req) | ACK → NPCI closes | ACK + Resp on same socket | **Major** |
+| Phase 2 (Switch) | New conn, ISO req/resp | New conn, ISO req/resp | None |
+| Phase 3 (Resp) | IMPS opens conn to NPCI | Same socket or REST | **Major** |
+| NPCI config | npci.socket.host/port | routing.npci.base-url (REST) | Config + client |
+| txn_id | Same end-to-end | Same end-to-end | None |
+
+---
+
+## 5. Implementation Plan (Phased)
+
+### Phase A: Config and NpciSocketClient (Outbound)
+
+**Files to create/modify:**
+
+1. **application.yml**
+   - Add under `npci` (or new top-level block):
+     ```yaml
+     npci:
+       socket:
+         host: ${NPCI_SOCKET_HOST:localhost}
+         port: ${NPCI_SOCKET_PORT:9085}
+     ```
+   - Keep `routing.npci.base-url` for REST/mock testing.
+
+2. **NpciSocketConfig.java** (new)
+   - `@ConfigurationProperties(prefix = "npci.socket")` or similar
+   - `getHost()`, `getPort()`
+
+3. **NpciSocketClient.java** (new)
+   - Method: `sendResponse(String respXml)` or `sendRespPay(String xml, String txnId)`, etc.
+   - Opens `Socket(npciHost, npciPort)`
+   - Sends `[4-byte length][XML]`
+   - Reads `[4-byte length][ACK payload]`
+   - Closes connection
+   - Handles IOException, timeouts
+
+4. **Strategy:** Support both modes via config:
+   - `npci.response-mode: socket` → use NpciSocketClient
+   - `npci.response-mode: same-connection` → current behavior (for backward compat / testing)
+   - `npci.response-mode: rest` → NpciMockClient (existing)
+
+---
+
+### Phase B: Change NpciSocketServer (Request Phase)
+
+**Current behavior:**
+```
+Receive Req → Validate → Send ACK → Register pending → Dispatch → future.get() → Send Resp → (loop/close)
+```
+
+**Target behavior:**
+```
+Receive Req → Validate → Send ACK → Dispatch (async, no wait) → Return/close
+```
+
+**Changes to NpciSocketServer.handleConnection():**
+
+1. For Req types (ReqPay, ReqChkTxn, etc.):
+   - Send ACK
+   - Do **not** call `pendingStore.registerPending()` or `future.get()`
+   - Call `dispatcher.dispatch(xml, txnId, msgType)` (fire-and-forget)
+   - Exit handler / allow NPCI to close
+2. For Resp types (when Switch initiates): keep current logic if needed.
+3. Remove or conditionally use `PendingSocketResponseStore` for request-originated flows when in `socket` mode.
+
+---
+
+### Phase C: Change Resp Services (Response Phase)
+
+**Current:** `pendingSocketStore.completePending(txnId, respXml)` → writes to same socket.
+
+**Target:** `npciSocketClient.sendRespPay(respXml)` (or equivalent) → opens outbound conn to NPCI.
+
+**Files to modify:**
+- `ReqPayService.processFromNpci()` – after building respXml, call `npciSocketClient.sendRespPay(respXml)` instead of/in addition to `completePending`
+- `RespChkTxnService` – same pattern
+- `RespValAddService` – same
+- `RespHbtService` – same
+- `RespListAccPvdService` – same
+
+**Strategy pattern:**
+- Introduce `INpciResponseSender` with implementations:
+  - `PendingSocketResponseSender` (current)
+  - `NpciSocketClientSender` (new, outbound)
+  - `NpciRestSender` (existing NpciMockClient)
+- Config drives which implementation is used.
+
+---
+
+### Phase D: mock_npci Alignment
+
+**Target:** mock_npci must accept outbound connections from IMPS and respond with ACK.
+
+**Current mock_npci:**
+- Has `NpciSocketServer` – need to verify if it listens for outbound from IMPS.
+- Has REST endpoints for IMPS callbacks.
+
+**Required:**
+1. mock_npci socket server on configurable port (e.g. 9085) that:
+   - Accepts connections from IMPS
+   - Receives `[4-byte length][RespPay XML]`
+   - Sends `[4-byte length][Ack XML]`
+   - Closes
+2. OR: mock_npci already has such a server – verify and document.
+
+---
+
+### Phase E: Testing and Documentation
+
+1. **docs/socket/SOCKET_GUIDE.md** (PowerShell APIs)
+   - Update for two-phase flow:
+     - Phase 1 test: Connect → Req → Read ACK → Close. (No second read.)
+     - Phase 3: mock_npci must be able to receive from IMPS (separate test or automated).
+
+2. **docs/PROJECT_CONNECTIONS.md**
+   - Document npci.socket.host/port
+   - Document connection summary table from spec
+
+3. **docs/guides/IMPS_Flow_Chart.md**
+   - Update diagram for: Req socket (ACK only) | Switch socket | Resp socket (IMPS outbound)
+
+---
+
+## 6. Connection Summary (Target)
+
+| Message | New Connection | ACK on Same Socket |
+|---------|----------------|--------------------|
+| ReqPay | ✅ | ✅ |
+| ReqPay ACK | ❌ (same as ReqPay) | same |
+| ISO to Switch | ✅ | Response on same |
+| RespPay | ✅ (IMPS outbound) | ✅ |
+| RespPay ACK | ❌ (same as RespPay) | same |
+
+---
+
+## 7. txn_id Rule (Unchanged)
+
+```
+NPCI ReqPay   → txn_id = X
+IMPS → Switch → txn_id = X (in ISO DE37/DE11 mapping)
+Switch → IMPS → txn_id = X
+IMPS RespPay  → txn_id = X
+```
+
+Already satisfied. No change.
+
+---
+
+## 8. What Must Never Be Done
+
+- ❌ Send RespPay on request socket (when in NPCI-compliant mode)
+- ❌ Use HTTP for NPCI in production (socket only per spec)
+- ❌ Use DB for NPCI IP (config only)
+- ❌ Change txn_id
+- ❌ Wait for switch before ACKing ReqPay
+
+---
+
+## 9. Implementation Order (Recommended)
+
+| Order | Phase | Effort | Risk |
+|-------|-------|--------|------|
+| 1 | Phase A: Config + NpciSocketClient | Medium | Low |
+| 2 | Phase D: Verify/update mock_npci | Low | Low |
+| 3 | Phase B: NpciSocketServer (ACK-only mode) | Medium | Medium |
+| 4 | Phase C: Resp services use NpciSocketClient | Medium | Medium |
+| 5 | Phase E: Docs + PowerShell tests | Low | Low |
+
+**Suggested approach:** Implement behind feature flag `npci.compliant-flow: true` so current and new flows can coexist during migration.
+
+---
+
+## 10. Checklist for Architects
+
+- [x] Config: `npci.socket.host`, `npci.socket.port` added
+- [x] NpciSocketClient: outbound TCP, [4-byte][XML], read ACK, close
+- [x] NpciSocketServer: ACK-only on request, no Resp on same socket
+- [x] Resp services: use NpciSocketClient when `npci.compliant-flow=true`
+- [x] mock_npci: accepts IMPS outbound, returns ACK
+- [x] txn_id: unchanged end-to-end
+- [x] Switch: unchanged (already compliant)
+- [x] Documentation updated
+
+## 11. Recent Additions (Post-Implementation)
+
+- **Transaction and message_audit_log:** IMPS only; all NPCI flows (ReqPay, ReqChkTxn, ReqValAdd, ReqListAccPvd, ReqHbt) log to `imps_db.transaction` and `imps_db.message_audit_log` using `txnId`.
+- **Single IMPS API:** All paths under `/imps` (no `/switch`). Switch → IMPS: `POST /imps/{reqtype|resptype}/{txnId}`.
+- **Console logging:** `[IMPS]`, `[MOCK_SWITCH]`, `[MOCK_NPCI]` prefixes for clarity.

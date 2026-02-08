@@ -13,6 +13,7 @@ import java.util.Random;
 
 /**
  * Converter for transforming NPCI XML messages to ISO 8583 format.
+ * Input XML must follow NPCI_IMPS_Message_Formats.md (project root).
  * Supports all IMPS API types: ReqPay, ReqChkTxn, ReqHbt, ReqValAdd, ReqListAccPvd
  */
 @Component

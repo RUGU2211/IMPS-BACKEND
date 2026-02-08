@@ -1,10 +1,18 @@
 package com.hitachi.imps.entity;
 
 import jakarta.persistence.*;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "institution_master")
 public class InstitutionMaster {
+
+    /** Auto-set last_modified_ts on insert and update for audit tracking. */
+    @PrePersist
+    @PreUpdate
+    protected void onPersistOrUpdate() {
+        this.lastModifiedTs = OffsetDateTime.now();
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,7 +59,7 @@ public class InstitutionMaster {
     private String spocPhone;
 
     @Column(name = "last_modified_ts")
-    private java.time.OffsetDateTime lastModifiedTs;
+    private OffsetDateTime lastModifiedTs;
 
     /* ===== GETTERS & SETTERS ===== */
     public Boolean getActive() {
@@ -100,6 +108,6 @@ public class InstitutionMaster {
     public String getSpocPhone() { return spocPhone; }
     public void setSpocPhone(String spocPhone) { this.spocPhone = spocPhone; }
 
-    public java.time.OffsetDateTime getLastModifiedTs() { return lastModifiedTs; }
-    public void setLastModifiedTs(java.time.OffsetDateTime lastModifiedTs) { this.lastModifiedTs = lastModifiedTs; }
+    public OffsetDateTime getLastModifiedTs() { return lastModifiedTs; }
+    public void setLastModifiedTs(OffsetDateTime lastModifiedTs) { this.lastModifiedTs = lastModifiedTs; }
 }

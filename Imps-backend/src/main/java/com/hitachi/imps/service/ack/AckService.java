@@ -9,6 +9,7 @@ import com.hitachi.imps.exception.InvalidReqMsgIdException;
 
 /**
  * Service to build ACK (Acknowledgement) messages as per IMPS specification.
+ * All formats must follow NPCI_IMPS_Message_Formats.md (project root).
  * ACK is returned to NPCI from IMPS immediately when a request/response lands,
  * to confirm receipt and that processing has started.
  *
@@ -70,5 +71,34 @@ public class AckService {
     public String buildRespValAddAck(String reqMsgId) { return buildAck("RespValAdd", reqMsgId); }
     public String buildReqListAccPvdAck(String reqMsgId) { return buildAck("ReqListAccPvd", reqMsgId); }
     public String buildRespListAccPvdAck(String reqMsgId) { return buildAck("RespListAccPvd", reqMsgId); }
-}
 
+    /** Build failure RespPay when institution (IFSC) validation fails. respCode MJ = INVALID IFSC. */
+    public String buildFailureRespPay(String reqMsgId, String respCode, String errMsg) {
+        String ts = OffsetDateTime.now().format(TS_FORMAT);
+        String respMsgId = com.hitachi.imps.service.util.ResponseIdHelper.responseMsgIdFromRequest(reqMsgId != null ? reqMsgId : "REQ");
+        String req = reqMsgId != null && reqMsgId.length() >= 35 ? reqMsgId.substring(0, 35) : (reqMsgId != null ? reqMsgId : "");
+        String code = respCode != null ? respCode : "MJ";
+        String ns = "http://npci.org/upi/schema/";
+        return "<ns2:RespPay xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn id=\"" + req + "\" note=\"Failure\" refId=\"\" refUrl=\"\" ts=\"" + ts + "\" type=\"PAY\" subType=\"PAY\" initiationMode=\"API\" refCategory=\"00\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(code) + "\"><ErrMsg>" + escapeXmlAttr(errMsg != null ? errMsg : "") + "</ErrMsg></Resp></ns2:RespPay>";
+    }
+
+    /** Build failure RespChkTxn (institution validation or BANK_DOWN). Includes ErrMsg when provided. */
+    public String buildFailureRespChkTxn(String reqMsgId, String respCode, String errMsg) {
+        return buildFailureRespWithErrMsg("RespChkTxn", reqMsgId, respCode != null ? respCode : "MJ", errMsg);
+    }
+
+    /** Build failure RespValAdd (institution validation or BANK_DOWN). Includes ErrMsg when provided. */
+    public String buildFailureRespValAdd(String reqMsgId, String respCode, String errMsg) {
+        return buildFailureRespWithErrMsg("RespValAdd", reqMsgId, respCode != null ? respCode : "MJ", errMsg);
+    }
+
+    /** Build failure response XML with optional ErrMsg (proper NPCI format). */
+    private String buildFailureRespWithErrMsg(String api, String reqMsgId, String respCode, String errMsg) {
+        String ts = OffsetDateTime.now().format(TS_FORMAT);
+        String respMsgId = com.hitachi.imps.service.util.ResponseIdHelper.responseMsgIdFromRequest(reqMsgId != null ? reqMsgId : "REQ");
+        String req = reqMsgId != null && reqMsgId.length() >= 35 ? reqMsgId.substring(0, 35) : (reqMsgId != null ? reqMsgId : "");
+        String ns = "http://npci.org/upi/schema/";
+        String errContent = (errMsg != null && !errMsg.isBlank()) ? "<ErrMsg>" + escapeXmlAttr(errMsg) + "</ErrMsg>" : "";
+        return "<ns2:" + api + " xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(respCode) + "\">" + errContent + "</Resp></ns2:" + api + ">";
+    }
+}

@@ -20,14 +20,36 @@ server:
   port: 8081
 
 # ===========================================
-# ROUTING CONFIGURATION (dynamic - no hardcoding)
+# ROUTING CONFIGURATION
 # ===========================================
-# All URLs/hosts/ports must come from here. Change only this file for different environments.
-# REST (current):
-#   NPCI → IMPS:  {server.port}/imps/{reqpay|...}/{txn_id}
-#   IMPS → Switch: routing.switch.base-url
-#   Switch → IMPS: {server.port}/switch/{resppay|...}/{txn_id}
-#   IMPS → NPCI:   routing.npci.base-url
+# Flow: Receive ReqPay from NPCI → read Head @orgId (request_org_id) → lookup institution_master where request_org_id = orgId
+#       → get switch_ip, switch_port → forward to switch.
+# Primary: institution_master (DB). Fallback: this routing section when no matching institution.
+#
+# NPCI → IMPS: {server.port}/imps/{reqtype}/{txn_id}
+# IMPS → Switch: institution_master.switch_ip:switch_port (socket 9084) or fallback below
+# Switch → IMPS: {server.port}/imps/{resptype}/{txn_id}
+# IMPS → NPCI: routing.npci.base-url (REST) or npci.socket.host:port (socket, when npci.compliant-flow: true)
+#
+# NPCI-compliant flow (npci.compliant-flow: true):
+#   Phase 1: NPCI connects → Req → IMPS ACK → NPCI closes
+#   Phase 3: IMPS opens NEW socket to npci.socket.host:port → Resp → NPCI ACK → IMPS closes
+
+
+# true: You read ACK once; IMPS sends the actual response to mock_npci:9085 on another connection.
+# false: You read twice (ACK, then response on the same socket).
+
+npci:  
+  compliant-flow: true
+  socket:
+    host: ${NPCI_SOCKET_HOST:192.168.1.38}
+    port: ${NPCI_SOCKET_PORT:9085}
+    ssl-enabled: false
+    # trust-store: npci-truststore.jks
+    # trust-store-password: IMPS-Backend
+    connect-timeout-ms: 10000
+    read-timeout-ms: 30000
+
 routing:
   npci:
     base-url: http://localhost:8083
@@ -36,36 +58,45 @@ routing:
 
   switch:
     base-url: http://localhost:8082
+    # Fallback when institution_master has no matching request_org_id. Socket default.
+    socket:
+      enabled: true
+      host: localhost
+      port: 9084
+      ssl-enabled: false
+      # trust-store: switch-truststore.jks
+      # trust-store-password: IMPS-Backend
+    rest:
+      enabled: false   # Optional: use REST when true; socket default
 
 # ===========================================
-# SOCKET-BASED IMPS (future) - all from config
+# SSL/TLS (optional)
+# ssl.enabled: true → NpciSocketServer uses SSLServerSocket on port 9443 (or socket.server.npci.ssl-port)
 # ===========================================
-# When switching to TCP sockets: no hardcoded host/port in code.
-# Server: IMPS listens for NPCI/Switch inbound (bind 0.0.0.0 in UAT/prod, not localhost).
-# Client: IMPS connects to NPCI/Switch (use server IP or hostname in UAT/prod).
-# Persistent connections; ACK and responses on same socket; multi-threading per plan.
-socket:
+ssl:
   enabled: false
+  key-store: file:../certs/imps-keystore.jks
+  key-store-password: IMPS-Backend
+  key-alias: imps
+  trust-store: file:../certs/imps-truststore.jks
+  trust-store-password: IMPS-Backend
+  client-auth: none   # none | want | need (need = mTLS)
+
+# ===========================================
+# NPCI SOCKET (TCP server – length-prefixed XML)
+# IMPS listens; NPCI connects and sends [4-byte length][XML]. Response: [4-byte length][XML] on same connection.
+# When ssl.enabled: true, uses port 9443 (socket.server.npci.ssl-port).
+# ===========================================
+socket:
+  enabled: true
   server:
     bind-host: 0.0.0.0
     npci:
       port: 9083
-    switch:
-      port: 9082
-  client:
-    npci:
-      host: localhost
-      port: 8083
-    switch:
-      host: localhost
-      port: 8082
-  threading:
-    acceptor-threads: 1
-    io-pool-size: 10
-    processing-pool-size: 20
-  framing:
-    length-prefix-bytes: 4
-    encoding: UTF-8
+      ssl-port: 9443   # Used when ssl.enabled: true
+  # Max XML size (bytes); response wait timeout when waiting for Switch callback
+  max-xml-size: 1048576
+  response-timeout-seconds: 60
 
 # ===========================================
 # API VERSION
@@ -75,9 +106,10 @@ imps:
     version: "2.1"
   org-id: "BANK01"
 
-  # Heartbeat Rule: System must generate heartbeat messages every 3 minutes.
-  # If no response is received, NPCI may mark the bank BIN down and block outward traffic.
+  # Switch check: IMPS TCP pings each bank switch every 3 min, updates institution_master.active.
+  # Console shows UP/DOWN banks with contact details. No auto ReqHbt from NPCI/Switch.
+  # Manual ReqHbt (socket, HTTP, SSL) triggers full flow: DB check, response, log to transaction + message_audit_log.
   heartbeat:
-    enabled: true
-    interval-ms: 180000   # 3 minutes
-    initial-delay-ms: 15000   # First heartbeat 15 seconds after startup
+    switch-check-enabled: true
+    switch-check-interval-ms: 180000   # Every 3 minutes
+    switch-check-initial-delay-ms: 10000   # First check 10 seconds after startup
