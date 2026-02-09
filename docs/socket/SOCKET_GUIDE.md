@@ -176,7 +176,38 @@ Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 
 ---
 
-## 7. TLS (SslStream) – port 9443
+## 7. Reverse flow – Switch → IMPS ([4 bytes][ISO], port 9086/9446)
+
+Switch connects to IMPS on **9086** (TCP) or **9446** (TLS). Protocol: `[4 bytes length big-endian][ISO]` — same framing as NPCI→IMPS, but payload is ISO instead of XML.
+
+**PowerShell helper (plain TCP):**
+
+```powershell
+function Send-SocketIso-Switch {
+    param([string]$HostParam='localhost',[int]$PortParam=9086,[byte[]]$IsoBytes)
+    $tcp = New-Object System.Net.Sockets.TcpClient($HostParam, $PortParam)
+    $s = $tcp.GetStream()
+    $len = [System.BitConverter]::GetBytes([int][uint32]$IsoBytes.Length)
+    [Array]::Reverse($len)
+    $s.Write($len, 0, 4)
+    $s.Write($IsoBytes, 0, $IsoBytes.Length)
+    $s.Flush()
+    $lenBuf = New-Object byte[] 4
+    $s.Read($lenBuf, 0, 4) | Out-Null
+    [Array]::Reverse($lenBuf)
+    $respLen = [System.BitConverter]::ToInt32($lenBuf, 0)
+    $respBuf = New-Object byte[] $respLen
+    $s.Read($respBuf, 0, $respLen) | Out-Null
+    $s.Close(); $tcp.Close()
+    return $respBuf
+}
+```
+
+Use with ISO bytes from your packager (e.g. 0200 financial, 0800 heartbeat). IMPS returns `[4 bytes][ISO]` response (0210 or 0810 ACK).
+
+---
+
+## 8. TLS (SslStream) – port 9443
 
 When `ssl.enabled: true`, use port **9443** and wrap the stream with `SslStream`:
 
@@ -206,7 +237,7 @@ Keystore/keytool: see [SOCKET_SSL_TLS.md](SOCKET_SSL_TLS.md).
 
 ---
 
-## 8. Test from another PC
+## 9. Test from another PC
 
 Use IMPS server IP instead of localhost:
 
@@ -222,8 +253,11 @@ $HostParam='192.168.1.38'; $PortParam=9083
 | Service | Port | Role |
 |---------|------|------|
 | IMPS | 9083 / 9443 | NPCI socket server ([4 bytes][XML]) |
+| IMPS | 9086 / 9446 | Switch socket server – reverse flow ([4 bytes][ISO]) |
 | mock_switch | 9084 / 9444 | Switch socket server ([4 bytes][ISO]) |
 | mock_npci | 9085 / 9445 | Receives Resp from IMPS (compliant flow) |
+
+**Reverse flow (Switch → IMPS):** Same connection pattern as NPCI→IMPS. Switch connects to IMPS on 9086 (TCP) or 9446 (TLS), sends `[4 bytes][ISO]`, receives `[4 bytes][ISO]`. Use PowerShell with ISO bytes instead of XML.
 
 | Connection | Config |
 |------------|--------|

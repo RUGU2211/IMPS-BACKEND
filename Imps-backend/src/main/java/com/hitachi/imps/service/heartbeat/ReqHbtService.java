@@ -50,11 +50,20 @@ public class ReqHbtService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId); } catch (Exception e) { System.err.println("ReqHbtService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqHbtService (NPCI) ERROR: " + e.getMessage()); }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId, String reqMsgId) {
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqHbtService (NPCI) ERROR: " + e.getMessage()); }
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
-        String msgId = xmlParsingService.extractMsgId(xml);
+        processFromNpci(xml, pathTxnId, null);
+    }
+
+    public void processFromNpci(String xml, String pathTxnId, String knownReqMsgId) {
+        String msgId = (knownReqMsgId != null && !knownReqMsgId.isBlank()) ? knownReqMsgId : xmlParsingService.extractMsgId(xml);
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
         if (txnId == null || txnId.isBlank()) txnId = msgId;
         auditService.saveRaw(txnId, "NPCI_REQHBT_XML_IN", xml);

@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "imps-api-collection-2026",
     "name": "IMPS API Collection (Dynamic)",
-    "description": "IMPS APIs – REST only, localhost testing (no socket, no SSL, no nginx).\n\nURL: {{impsBaseUrl}}/imps/{reqtype}/{{txnId}}. Body: orgId=\"{{orgId}}\", msgId=\"{{msgId}}\", id=\"{{txnId}}\". Get IDs from NPCI Mock GET /api/ids or use pre-request script.\n\nPorts: IMPS 8081, Mock Switch 8082, NPCI Mock 8083.\nSocket flow: npci.compliant-flow true (default) – ACK on request socket; Resp sent by IMPS to mock_npci:9085. See docs/socket/SOCKET_GUIDE.md for socket testing.",
+    "description": "IMPS APIs – REST (HTTP/HTTPS) and reverse flow (Switch → IMPS with ISO).\n\nConnection types: HTTP {{impsBaseUrl}} (8081), HTTPS {{impsBaseUrlHttps}} (8443), Socket TCP 9083, Socket TLS 9443.\n\nNPCI → IMPS (XML): POST /imps/{reqtype}/{{txnId}}, Content-Type: application/xml. Body: orgId, msgId, id (35 chars).\n\nReverse flow (Switch → IMPS, ISO): POST /imps/{reqtype}/{{txnId}}, Content-Type: application/octet-stream, Body: binary ISO 8583. Response: binary ISO.\n\nPorts: IMPS 8081/8443, Mock Switch 8082, NPCI Mock 8083. Socket: 9083/9443 (IMPS), 9084/9444 (Switch), 9085/9445 (NPCI). See docs/TESTING_GUIDE.md and docs/POSTMAN.md.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -41,6 +41,24 @@
       "value": "BAN5t2Dk18UFMIMFENLBga12345678901234",
       "type": "string",
       "description": "Message ID (Head @msgId): 35 chars. Fetched from NPCI Mock GET /api/ids or set in pre-request."
+    },
+    {
+      "key": "impsBaseUrlHttps",
+      "value": "https://localhost:8443",
+      "type": "string",
+      "description": "IMPS REST over HTTPS. Use --spring.profiles.active=ssl. Disable SSL cert verification in Postman for dev."
+    },
+    {
+      "key": "switchBaseUrlHttps",
+      "value": "https://localhost:8444",
+      "type": "string",
+      "description": "Mock Switch HTTPS if enabled (optional)."
+    },
+    {
+      "key": "npciMockBaseUrlHttps",
+      "value": "https://localhost:8445",
+      "type": "string",
+      "description": "NPCI Mock HTTPS if enabled (optional)."
     }
   ],
   "event": [
@@ -852,6 +870,77 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Reverse flow - Switch → IMPS (ISO)",
+      "description": "Reverse flow (Switch → IMPS). Primary: Socket [4 bytes][ISO] on port 9086/9446 – same connection pattern as NPCI→IMPS. Optional: REST Body → binary ISO on /imps/{reqtype}/{txnId}. See docs/POSTMAN.md and docs/socket/SOCKET_GUIDE.md.",
+      "item": [
+        {
+          "name": "ReqPay (ISO) - Switch to IMPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Accept", "value": "application/octet-stream"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": {"raw": "{{impsBaseUrl}}/imps/reqpay/{{txnId}}", "host": ["{{impsBaseUrl}}"], "path": ["imps", "reqpay", "{{txnId}}"]},
+            "description": "Send binary ISO 8583 (0200). IMPS → NPCI XML → Resp XML → ISO 0210. Select file in Body tab."
+          }
+        },
+        {
+          "name": "ReqChkTxn (ISO) - Switch to IMPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Accept", "value": "application/octet-stream"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": {"raw": "{{impsBaseUrl}}/imps/reqchktxn/{{txnId}}", "host": ["{{impsBaseUrl}}"], "path": ["imps", "reqchktxn", "{{txnId}}"]},
+            "description": "Send binary ISO (0200 ChkTxn). Response: ISO 0210."
+          }
+        },
+        {
+          "name": "ReqHbt (ISO) - Switch to IMPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Accept", "value": "application/octet-stream"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": {"raw": "{{impsBaseUrl}}/imps/reqhbt/{{txnId}}", "host": ["{{impsBaseUrl}}"], "path": ["imps", "reqhbt", "{{txnId}}"]},
+            "description": "Send binary ISO (0800 heartbeat). Response: ISO 0810."
+          }
+        },
+        {
+          "name": "ReqListAccPvd (ISO) - Switch to IMPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Accept", "value": "application/octet-stream"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": {"raw": "{{impsBaseUrl}}/imps/reqlistaccpvd/{{txnId}}", "host": ["{{impsBaseUrl}}"], "path": ["imps", "reqlistaccpvd", "{{txnId}}"]},
+            "description": "Send binary ISO. IMPS responds with list (no NPCI call)."
+          }
+        },
+        {
+          "name": "ReqValAdd (ISO) - Switch to IMPS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/octet-stream"},
+              {"key": "Accept", "value": "application/octet-stream"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": {"raw": "{{impsBaseUrl}}/imps/reqvaladd/{{txnId}}", "host": ["{{impsBaseUrl}}"], "path": ["imps", "reqvaladd", "{{txnId}}"]},
+            "description": "Send binary ISO (0200 ValAdd). Response: ISO 0210."
+          }
         }
       ]
     },

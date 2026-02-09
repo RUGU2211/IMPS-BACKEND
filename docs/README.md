@@ -4,8 +4,9 @@
 
 | Document | Purpose |
 |----------|---------|
-| [PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.md) | Ports, databases, config, socket/HTTP flow |
-| [TESTING_GUIDE.md](TESTING_GUIDE.md) | HTTP + TCP + TLS testing (Postman, curl, PowerShell) |
+| [PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.md) | Ports (HTTP/HTTPS/TCP/TLS), databases, config, socket/HTTP flow |
+| [POSTMAN.md](POSTMAN.md) | Postman collection, variables, HTTP/HTTPS, reverse-flow ISO format |
+| [TESTING_GUIDE.md](TESTING_GUIDE.md) | HTTP + HTTPS + TCP + TLS testing (Postman, curl, PowerShell) |
 | [socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md) | Socket protocol, PowerShell copy-paste APIs, TLS, troubleshooting |
 | [socket/SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.md) | SSL/TLS keytool, OpenSSL, firewall, keystore paths |
 

@@ -41,13 +41,15 @@ mvn spring-boot:run
 
 ### Postman
 
-1. Import `postman/IMPS_API_Collection.postman_collection.json`
-2. **Variables:**
+1. Import **`postman/IMPS_API_Collection.postman_collection.json`**
+2. **Variables (HTTP):**
    - `impsBaseUrl`: `http://localhost:8081`
    - `switchBaseUrl`: `http://localhost:8082`
-   - `npciBaseUrl`: `http://localhost:8083`
-3. **Request format:** `POST {{impsBaseUrl}}/imps/{reqtype}/{{txnId}}`  
+   - `npciMockBaseUrl`: `http://localhost:8083`
+3. **Variables (HTTPS):** Use `impsBaseUrlHttps`: `https://localhost:8443` when IMPS runs with `--spring.profiles.active=ssl`. Disable SSL certificate verification in Postman for dev.
+4. **Request format (NPCI → IMPS, XML):** `POST {{impsBaseUrl}}/imps/{reqtype}/{{txnId}}`, Content-Type: `application/xml`.  
    Example: `POST http://localhost:8081/imps/reqpay/PAY00000000000000000000000000000001`
+5. **Reverse flow (Switch → IMPS, ISO):** Use folder **Reverse flow - Switch → IMPS (ISO)**. Body: **binary** (select ISO 8583 file). Content-Type: `application/octet-stream`. Response: binary ISO. See [POSTMAN.md](POSTMAN.md).
 
 ### curl examples
 
@@ -181,13 +183,15 @@ curl -k https://localhost:8443/imps/reqhbt/HBT00000000000000000000000000000001 -
 
 ## 6. Test matrix
 
-| API         | HTTP (8081) | Socket (9083) | Socket TLS (9443) | Switch needed |
-|-------------|-------------|---------------|-------------------|---------------|
-| ReqHbt      | Yes         | Yes           | Yes               | No            |
-| ReqListAccPvd | Yes       | Yes           | Yes               | No            |
-| ReqPay      | Yes         | Yes           | Yes               | Yes (9084)    |
-| ReqChkTxn   | Yes         | Yes           | Yes               | Yes (9084)    |
-| ReqValAdd   | Yes         | Yes           | Yes               | Yes (9084)    |
+| API         | HTTP (8081) | HTTPS (8443) | Socket TCP (9083) | Socket TLS (9443) | Switch needed |
+|-------------|-------------|--------------|-------------------|-------------------|---------------|
+| ReqHbt      | Yes         | Yes          | Yes               | Yes               | No            |
+| ReqListAccPvd | Yes       | Yes          | Yes               | Yes               | No            |
+| ReqPay      | Yes         | Yes          | Yes               | Yes               | Yes (9084)    |
+| ReqChkTxn   | Yes         | Yes          | Yes               | Yes               | Yes (9084)    |
+| ReqValAdd   | Yes         | Yes          | Yes               | Yes               | Yes (9084)    |
+
+**Reverse flow (Switch → IMPS):** Same APIs as above; Switch sends **ISO** to IMPS (REST: `application/octet-stream`). Test via Postman folder “Reverse flow - Switch → IMPS (ISO)” with binary body, or via TCP/TLS to IMPS if Switch uses socket.
 
 ---
 
@@ -206,6 +210,9 @@ curl -k https://localhost:8443/imps/reqhbt/HBT00000000000000000000000000000001 -
 
 | Document | Purpose |
 |----------|---------|
+| [POSTMAN.md](POSTMAN.md) | Postman collection, variables (HTTP/HTTPS), folders, reverse-flow ISO format |
+| [PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.md) | Ports (HTTP/HTTPS/TCP/TLS), DB, config |
 | [SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md) | Full socket protocol and PowerShell scripts |
+| [SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.md) | TLS keytool, OpenSSL, firewall |
 | [IMPS_Req_API_Bodies.md](specs/IMPS_Req_API_Bodies.md) | Sample request bodies, test accounts |
 | [NPCI_IMPS_Message_Formats.md](specs/NPCI_IMPS_Message_Formats.md) | Req/Resp XML structures |

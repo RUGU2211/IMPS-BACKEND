@@ -31,8 +31,18 @@ public class MockResponseService {
     @Value("${imps.imps_port:8081}")
     private int impsPort;
 
+    @Value("${imps.base-path:/imps}")
+    private String impsBasePath;
+
     private String getImpsBaseUrl() {
         return "http://" + impsIp + ":" + impsPort;
+    }
+
+    /** Build endpoint path dynamically: base-path / resptype / txnId (e.g. /imps/resppay/ABC123). */
+    public String buildEndpointPath(String responseType, String txnId) {
+        String id = (txnId != null && !txnId.isBlank()) ? txnId : "placeholder";
+        String path = impsBasePath.endsWith("/") ? impsBasePath : impsBasePath + "/";
+        return path + responseType.toLowerCase() + "/" + id;
     }
 
     @Value("${mock.response-delay-ms:500}")
@@ -111,9 +121,7 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber()); // Approval number
             respIso.set(39, responseCode); // 00=success, 51=insufficient funds, 14=invalid account, 96=error
 
-            // Send to IMPS Backend: http://localhost:8081/imps/resppay/{txn_id}
-            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
-                ? "/imps/resppay/" + inboundTxnId : "/imps/resppay/placeholder";
+            String endpoint = buildEndpointPath("resppay", inboundTxnId);
             sendToBackend(respIso, endpoint, "RESPPAY");
 
         } catch (Exception e) {
@@ -148,8 +156,7 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber());
             respIso.set(39, "00"); // Transaction found, SUCCESS
 
-            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
-                ? "/imps/respchktxn/" + inboundTxnId : "/imps/respchktxn/placeholder";
+            String endpoint = buildEndpointPath("respchktxn", inboundTxnId);
             sendToBackend(respIso, endpoint, "RESPCHKTXN");
 
         } catch (Exception e) {
@@ -183,8 +190,7 @@ public class MockResponseService {
             respIso.set(13, LocalDateTime.now().format(DATE_FORMAT));
             respIso.set(39, "00"); // Heartbeat OK
 
-            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
-                ? "/imps/resphbt/" + inboundTxnId : "/imps/resphbt/placeholder";
+            String endpoint = buildEndpointPath("resphbt", inboundTxnId);
             sendToBackend(respIso, endpoint, "RESPHBT");
 
         } catch (Exception e) {
@@ -223,8 +229,7 @@ public class MockResponseService {
             // Add account holder name in additional data
             respIso.set(48, "ACCOUNT_HOLDER_NAME");
 
-            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
-                ? "/imps/respvaladd/" + inboundTxnId : "/imps/respvaladd/placeholder";
+            String endpoint = buildEndpointPath("respvaladd", inboundTxnId);
             sendToBackend(respIso, endpoint, "RESPVALADD");
 
         } catch (Exception e) {
@@ -260,8 +265,7 @@ public class MockResponseService {
             // Add mock bank list in additional data
             respIso.set(48, "HDFC|ICICI|SBI|AXIS");
 
-            String endpoint = (inboundTxnId != null && !inboundTxnId.isBlank())
-                ? "/imps/resplistaccpvd/" + inboundTxnId : "/imps/resplistaccpvd/placeholder";
+            String endpoint = buildEndpointPath("resplistaccpvd", inboundTxnId);
             sendToBackend(respIso, endpoint, "RESPLISTACCPVD");
 
         } catch (Exception e) {
@@ -436,19 +440,22 @@ public class MockResponseService {
 
     /**
      * Forward raw ISO bytes to IMPS Backend (e.g. when Mock Switch received XML and converted to ISO).
+     * IMPS returns ISO ACK (application/octet-stream); we accept byte[] response.
      */
     public void forwardIsoToBackend(byte[] isoBytes, String endpoint, String type) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             HttpEntity<byte[]> request = new HttpEntity<>(isoBytes, headers);
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<byte[]> response = restTemplate.exchange(
                 getImpsBaseUrl() + endpoint,
                 HttpMethod.POST,
                 request,
-                String.class
+                byte[].class
             );
-            System.out.println("[MOCK_SWITCH] FORWARDED " + type + " to IMPS Backend: " + response.getStatusCode());
+            byte[] isoAck = response.getBody();
+            System.out.println("[MOCK_SWITCH] FORWARDED " + type + " to IMPS Backend: " + response.getStatusCode()
+                + (isoAck != null && isoAck.length > 0 ? " | ISO ACK received (" + isoAck.length + " bytes)" : ""));
         } catch (Exception e) {
             System.err.println("Forward to IMPS Backend failed: " + e.getMessage());
         }

@@ -45,12 +45,22 @@ public class ReqValAddService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId); } catch (Exception e) { System.err.println("ReqValAddService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqValAddService (NPCI) ERROR: " + e.getMessage()); }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId, String reqMsgId) {
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqValAddService (NPCI) ERROR: " + e.getMessage()); }
     }
 
     @Transactional
     public void processFromNpci(String xml, String pathTxnId) {
-        String msgId = xmlParsingService.extractMsgId(xml);
+        processFromNpci(xml, pathTxnId, null);
+    }
+
+    @Transactional
+    public void processFromNpci(String xml, String pathTxnId, String knownReqMsgId) {
+        String msgId = (knownReqMsgId != null && !knownReqMsgId.isBlank()) ? knownReqMsgId : xmlParsingService.extractMsgId(xml);
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
         if (txnId == null || txnId.isBlank()) txnId = msgId;
         auditService.saveRaw(txnId, "NPCI_REQVALADD_XML_IN", xml);
@@ -139,9 +149,13 @@ public class ReqValAddService {
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
+        processFromSwitchSync(isoBytes, pathTxnId);
+    }
+
+    /** Reverse flow: Switch → IMPS → NPCI → IMPS → Switch. Returns Resp ISO. */
+    public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQVALADD_ISO_IN", isoBytes);
-        // Institution (IFSC) validation – IMPS only (DE33)
         try {
             org.jpos.iso.ISOMsg iso = new org.jpos.iso.ISOMsg();
             iso.setPackager(new com.hitachi.imps.iso.ImpsIsoPackager());
@@ -149,17 +163,32 @@ public class ReqValAddService {
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("IMPS: ReqValAdd from Switch – institution invalid: " + instErr + ", not forwarding to NPCI");
-                return;
+                System.out.println("IMPS: ReqValAdd from Switch – institution invalid: " + instErr);
+                return null;
             }
         } catch (Exception e) {
             System.err.println("IMPS: ReqValAdd from Switch – could not validate IFSC: " + e.getMessage());
+            return null;
         }
-        String xml = isoToXmlConverter.convertReqValAddToXml(isoBytes);
-        auditService.saveRaw(txnId, "NPCI_REQVALADD_XML_OUT", xml);
+        String reqXml = isoToXmlConverter.convertReqValAddToXml(isoBytes);
+        auditService.saveRaw(txnId, "NPCI_REQVALADD_XML_OUT", reqXml);
+        String respXml;
         try {
-            if (txnId != null && !txnId.isBlank()) npciMockClient.sendReqValAdd(xml, txnId);
-            else npciMockClient.sendReqValAdd(xml);
-        } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqValAdd(reqXml, txnId) : npciMockClient.sendReqValAdd(reqXml);
+        } catch (Exception e) {
+            System.err.println("NPCI Mock not available: " + e.getMessage());
+            return null;
+        }
+        if (respXml == null || respXml.isBlank()) return null;
+        auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_IN", respXml);
+        try {
+            org.jpos.iso.ISOMsg respIso = xmlToIsoConverter.convertRespValAdd(respXml);
+            byte[] respBytes = IsoUtil.pack(respIso);
+            auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPVALADD_ISO_OUT", respBytes);
+            return respBytes;
+        } catch (Exception e) {
+            System.err.println("IMPS: RespValAdd XML to ISO failed: " + e.getMessage());
+            return null;
+        }
     }
 }

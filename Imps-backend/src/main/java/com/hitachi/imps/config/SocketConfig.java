@@ -19,6 +19,7 @@ public class SocketConfig {
     public static class Server {
         private String bindHost = "0.0.0.0";
         private Npci npci = new Npci();
+        private SwitchServer switchServer = new SwitchServer();
 
         public static class Npci {
             private int port = 9083;
@@ -29,10 +30,26 @@ public class SocketConfig {
             public int getSslPort() { return sslPort; }
             public void setSslPort(int sslPort) { this.sslPort = sslPort; }
         }
+
+        /** Switch inbound socket: Switch connects, sends [4 bytes][ISO], IMPS responds [4 bytes][ISO] */
+        public static class SwitchServer {
+            private boolean enabled = true;
+            private int port = 9086;
+            private int sslPort = 9446;
+            public boolean isEnabled() { return enabled; }
+            public void setEnabled(boolean enabled) { this.enabled = enabled; }
+            public int getPort() { return port; }
+            public void setPort(int port) { this.port = port; }
+            public int getSslPort() { return sslPort; }
+            public void setSslPort(int sslPort) { this.sslPort = sslPort; }
+        }
+
         public String getBindHost() { return bindHost; }
         public void setBindHost(String bindHost) { this.bindHost = bindHost; }
         public Npci getNpci() { return npci; }
         public void setNpci(Npci npci) { this.npci = npci; }
+        public SwitchServer getSwitchServer() { return switchServer; }
+        public void setSwitchServer(SwitchServer switchServer) { this.switchServer = switchServer; }
     }
 
     public boolean isEnabled() { return enabled; }

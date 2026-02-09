@@ -173,7 +173,7 @@ ssl:
 | D1 | Document keytool commands for generating IMPS keystore (self-signed for dev) |
 | D2 | Document export/import for client trust |
 | D3 | Add `src/main/resources/certs/` (gitignored) or document path for keystores |
-| D4 | Provide sample `application-ssl.yml` or profile `ssl` |
+| D4 | Profile `ssl` in `application.yml` (HTTPS on 8443) |
 
 ### Phase E: Testing and Documentation
 

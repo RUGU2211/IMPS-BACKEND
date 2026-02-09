@@ -49,7 +49,17 @@ public class ReqPayService {
     @Async
     public void processAsync(String xml, String pathTxnId) {
         try {
-            processFromNpci(xml, pathTxnId);
+            processFromNpci(xml, pathTxnId, null);
+        } catch (Exception e) {
+            System.err.println("ReqPayService (NPCI) ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId, String reqMsgId) {
+        try {
+            processFromNpci(xml, pathTxnId, reqMsgId);
         } catch (Exception e) {
             System.err.println("ReqPayService (NPCI) ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -57,7 +67,11 @@ public class ReqPayService {
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
-        String msgId = xmlParsingService.extractMsgId(xml);
+        processFromNpci(xml, pathTxnId, null);
+    }
+
+    public void processFromNpci(String xml, String pathTxnId, String knownReqMsgId) {
+        String msgId = (knownReqMsgId != null && !knownReqMsgId.isBlank()) ? knownReqMsgId : xmlParsingService.extractMsgId(xml);
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
         if (txnId == null || txnId.isBlank()) txnId = msgId;
 
@@ -133,7 +147,7 @@ public class ReqPayService {
         } catch (Exception e) { return null; }
     }
 
-    // ----- Switch → IMPS (ISO): receive ISO, convert to XML, send to NPCI -----
+    // ----- Switch → IMPS (ISO): reverse flow – receive ISO, convert to XML, send to NPCI, get Resp XML, convert to ISO, return -----
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
         try {
@@ -145,10 +159,17 @@ public class ReqPayService {
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
+        processFromSwitchSync(isoBytes, pathTxnId);
+    }
+
+    /**
+     * Reverse flow: Switch sends Req ISO → IMPS converts to XML → sends to NPCI → gets Resp XML → converts to ISO.
+     * Returns Resp ISO to send back to Switch. Uses switch_ip/switch_port from institution_master for routing.
+     */
+    public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
 
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQPAY_ISO_IN", isoBytes);
-        // Institution (IFSC) validation – IMPS only (DE33 = payee IFSC)
         try {
             ISOMsg iso = new ISOMsg();
             iso.setPackager(new com.hitachi.imps.iso.ImpsIsoPackager());
@@ -156,22 +177,57 @@ public class ReqPayService {
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("IMPS: ReqPay from Switch – institution invalid: " + instErr + ", not forwarding to NPCI");
-                return;
+                System.out.println("IMPS: ReqPay from Switch – institution invalid: " + instErr);
+                return buildFailureRespPayIso(isoBytes, instErr);
             }
         } catch (Exception e) {
             System.err.println("IMPS: ReqPay from Switch – could not validate IFSC: " + e.getMessage());
+            return null;
         }
-        String xml = isoToXmlConverter.convertReqPayToXml(isoBytes);
-        auditService.saveRaw(txnId, "NPCI_REQPAY_XML_OUT", xml);
 
+        String reqXml = isoToXmlConverter.convertReqPayToXml(isoBytes);
+        auditService.saveRaw(txnId, "NPCI_REQPAY_XML_OUT", reqXml);
+
+        String respXml;
         try {
-            if (txnId != null && !txnId.isBlank())
-                npciMockClient.sendReqPay(xml, txnId);
-            else
-                npciMockClient.sendReqPay(xml);
+            respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqPay(reqXml, txnId) : npciMockClient.sendReqPay(reqXml);
         } catch (Exception e) {
-            System.out.println("NPCI Mock Client not available: " + e.getMessage());
+            System.err.println("NPCI Mock Client not available: " + e.getMessage());
+            return null;
+        }
+        if (respXml == null || respXml.isBlank()) return null;
+
+        auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_IN", respXml);
+        try {
+            ISOMsg respIso = xmlToIsoConverter.convertRespPay(respXml);
+            byte[] respBytes = IsoUtil.pack(respIso);
+            auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPPAY_ISO_OUT", respBytes);
+            return respBytes;
+        } catch (Exception e) {
+            System.err.println("IMPS: RespPay XML to ISO failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private byte[] buildFailureRespPayIso(byte[] reqIsoBytes, String errMsg) {
+        try {
+            ISOMsg req = IsoUtil.unpack(reqIsoBytes, new ImpsIsoPackager());
+            ISOMsg resp = new ISOMsg();
+            resp.setPackager(new ImpsIsoPackager());
+            resp.setMTI("0210");
+            if (req.hasField(3)) resp.set(3, req.getString(3));
+            if (req.hasField(4)) resp.set(4, req.getString(4));
+            if (req.hasField(37)) resp.set(37, req.getString(37));
+            if (req.hasField(41)) resp.set(41, req.getString(41));
+            if (req.hasField(120)) resp.set(120, req.getString(120));
+            resp.set(11, req.hasField(11) ? req.getString(11) : String.format("%06d", System.currentTimeMillis() % 1_000_000));
+            resp.set(12, java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss")));
+            resp.set(13, java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("MMdd")));
+            resp.set(38, "000000");
+            resp.set(39, "96");
+            return IsoUtil.pack(resp);
+        } catch (Exception e) {
+            return null;
         }
     }
 }

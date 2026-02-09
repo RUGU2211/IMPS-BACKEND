@@ -1,11 +1,16 @@
 package com.hitachi.imps.service.ack;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 
+import org.jpos.iso.ISOException;
+import org.jpos.iso.ISOMsg;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.exception.InvalidReqMsgIdException;
+import com.hitachi.imps.iso.ImpsIsoPackager;
+import com.hitachi.imps.util.IsoUtil;
 
 /**
  * Service to build ACK (Acknowledgement) messages as per IMPS specification.
@@ -27,6 +32,8 @@ public class AckService {
     private static final String XMLNS_NS2 = "http://npci.org/upi/schema/";
     private static final String XMLNS_NS3 = "http://npci.org/cm/schema/";
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HHmmss");
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMdd");
 
     /**
      * Build ACK XML. reqMsgId must be non-blank (validated like txn_id).
@@ -90,6 +97,36 @@ public class AckService {
     /** Build failure RespValAdd (institution validation or BANK_DOWN). Includes ErrMsg when provided. */
     public String buildFailureRespValAdd(String reqMsgId, String respCode, String errMsg) {
         return buildFailureRespWithErrMsg("RespValAdd", reqMsgId, respCode != null ? respCode : "MJ", errMsg);
+    }
+
+    /**
+     * Build ISO ACK (0810) when IMPS receives an ISO response from Switch.
+     * Copies key fields from the received message so Switch can match the transaction; DE39=00 (approved/ack).
+     */
+    public byte[] buildIsoAckFromResponse(byte[] receivedIso) {
+        if (receivedIso == null || receivedIso.length == 0) return null;
+        try {
+            ISOMsg received = IsoUtil.unpack(receivedIso, new ImpsIsoPackager());
+            ISOMsg ack = new ISOMsg();
+            ack.setPackager(new ImpsIsoPackager());
+            ack.setMTI("0810");
+            copyField(received, ack, 3);
+            copyField(received, ack, 24);
+            copyField(received, ack, 37);
+            copyField(received, ack, 41);
+            copyField(received, ack, 120);
+            ack.set(11, received.hasField(11) ? received.getString(11) : String.format("%06d", System.currentTimeMillis() % 1_000_000));
+            ack.set(12, LocalDateTime.now().format(TIME_FMT));
+            ack.set(13, LocalDateTime.now().format(DATE_FMT));
+            ack.set(39, "00");
+            return IsoUtil.pack(ack);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static void copyField(ISOMsg src, ISOMsg dst, int field) throws ISOException {
+        if (src.hasField(field)) dst.set(field, src.getString(field));
     }
 
     /** Build failure response XML with optional ErrMsg (proper NPCI format). */

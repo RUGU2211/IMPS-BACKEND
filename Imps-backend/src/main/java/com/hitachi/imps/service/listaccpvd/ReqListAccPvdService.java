@@ -8,8 +8,12 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.jpos.iso.ISOMsg;
+
 import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.converter.XmlToIsoConverter;
 import com.hitachi.imps.entity.InstitutionMaster;
+import com.hitachi.imps.util.IsoUtil;
 import com.hitachi.imps.entity.TransactionEntity;
 import com.hitachi.imps.repository.InstitutionMasterRepository;
 import com.hitachi.imps.service.TransactionService;
@@ -28,6 +32,7 @@ public class ReqListAccPvdService {
 
     @Autowired private InstitutionMasterRepository institutionRepo;
     @Autowired private NpciMockClient npciMockClient;
+    @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -36,12 +41,22 @@ public class ReqListAccPvdService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId); } catch (Exception e) { System.err.println("ReqListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId, String reqMsgId) {
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
     }
 
     @Transactional
     public void processFromNpci(String xml, String pathTxnId) {
-        String msgId = xmlParsingService.extractMsgId(xml);
+        processFromNpci(xml, pathTxnId, null);
+    }
+
+    @Transactional
+    public void processFromNpci(String xml, String pathTxnId, String knownReqMsgId) {
+        String msgId = (knownReqMsgId != null && !knownReqMsgId.isBlank()) ? knownReqMsgId : xmlParsingService.extractMsgId(xml);
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
         if (txnId == null || txnId.isBlank()) txnId = msgId;
         TransactionEntity txn = transactionService.createRequest(txnId, xml, "LISTACCPVD");  // INIT when req received
@@ -65,11 +80,25 @@ public class ReqListAccPvdService {
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
+        processFromSwitchSync(isoBytes, pathTxnId);
+    }
+
+    /** Reverse flow: Switch sends Req ISO → IMPS builds Resp from DB → converts to ISO, returns. */
+    public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQLISTACCPVD_ISO_IN", isoBytes);
         List<InstitutionMaster> banks = institutionRepo.findByActiveTrue();
         String respXml = buildRespListAccPvd(txnId, banks);
-        auditService.saveRaw(txnId, "SWITCH_RESPLISTACCPVD_OUT", respXml);
+        auditService.saveRaw(txnId, "SWITCH_RESPLISTACCPVD_XML", respXml);
+        try {
+            ISOMsg respIso = xmlToIsoConverter.convertRespListAccPvd(respXml);
+            byte[] respBytes = IsoUtil.pack(respIso);
+            auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPLISTACCPVD_ISO_OUT", respBytes);
+            return respBytes;
+        } catch (Exception e) {
+            System.err.println("IMPS: RespListAccPvd XML to ISO failed: " + e.getMessage());
+            return null;
+        }
     }
 
     private String buildRespListAccPvd(String reqMsgId, List<InstitutionMaster> banks) {

@@ -142,8 +142,10 @@ public class NpciSocketServer {
                 String xml = new String(payload, StandardCharsets.UTF_8);
                 System.out.println("[IMPS] Req/Resp received from NPCI (socket):");
                 System.out.println(xml);
+                // Single msg_id extraction when request lands (socket entry)
+                String reqMsgId = xmlParsingService.extractMsgId(xml);
                 String txnId = xmlParsingService.extractTxnId(xml);
-                if (txnId == null || txnId.isBlank()) txnId = xmlParsingService.extractMsgId(xml);
+                if (txnId == null || txnId.isBlank()) txnId = reqMsgId;
                 String msgType = detectMessageType(xml);
                 boolean isRespType = isRespMessageType(msgType);
                 String responseXml;
@@ -157,30 +159,28 @@ public class NpciSocketServer {
                         commonCodeValidationService.validateCommonHeadTxn(xml);
                     }
                     if (isRespType) {
-                        dispatcher.dispatch(xml, txnId, msgType);
-                        String reqMsgId = xmlParsingService.extractMsgId(xml);
+                        dispatcher.dispatch(xml, txnId, msgType, reqMsgId);
                         responseXml = ackService.buildAckWithFallback(msgType, reqMsgId, txnId);
                     } else {
-                        String reqMsgId = xmlParsingService.extractMsgId(xml);
                         String ackXml = ackService.buildAckWithFallback(msgType, reqMsgId, txnId);
                         byte[] ackBytes = ackXml.getBytes(StandardCharsets.UTF_8);
                         out.writeInt(ackBytes.length);
                         out.write(ackBytes);
                         out.flush();
                         if (npciSocketConfig.isCompliantFlow() && npciResponseSender != null) {
-                            dispatcher.dispatch(xml, txnId, msgType);
+                            dispatcher.dispatch(xml, txnId, msgType, reqMsgId);
                             continue;
                         }
                         CompletableFuture<String> future = pendingStore.registerPending(txnId);
-                        dispatcher.dispatch(xml, txnId, msgType);
+                        dispatcher.dispatch(xml, txnId, msgType, reqMsgId);
                         responseXml = future.get(timeoutSec, TimeUnit.SECONDS);
                     }
                 } catch (ReqPayValidationException e) {
-                    responseXml = buildErrorAck("ReqPay", xmlParsingService.extractMsgId(xml), e.getMessage());
+                    responseXml = buildErrorAck("ReqPay", reqMsgId, e.getMessage());
                 } catch (CommonCodeValidationException e) {
-                    responseXml = buildErrorAck(msgType, xmlParsingService.extractMsgId(xml), e.getMessage());
+                    responseXml = buildErrorAck(msgType, reqMsgId, e.getMessage());
                 } catch (IllegalArgumentException e) {
-                    responseXml = buildErrorAck("", xmlParsingService.extractMsgId(xml), e.getMessage());
+                    responseXml = buildErrorAck("", reqMsgId, e.getMessage());
                 } catch (java.util.concurrent.TimeoutException e) {
                     pendingStore.removePending(txnId);
                     responseXml = buildErrorAck("", txnId, "Response timeout");

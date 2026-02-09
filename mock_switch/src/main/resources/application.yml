@@ -1,21 +1,19 @@
+# ===========================================
+# MOCK SWITCH – Application configuration
+# ===========================================
+
 server:
   port: 8082
 
 spring:
   application:
     name: mock-switch
-
-  # ===========================================
-  # DATABASE CONFIGURATION - switch_db (Switch only: account_master)
-  # ===========================================
   datasource:
     url: jdbc:postgresql://localhost:5432/switch_db
     username: postgres
     password: root
     hikari:
-      # Run housekeeper more often to avoid "thread starvation or clock leap" warnings
-      # (e.g. when machine sleeps or pool is briefly busy)
-      housekeeping-run-interval: 10000  # 10s (default 30s)
+      housekeeping-run-interval: 10000  # 10s (avoids thread starvation / clock leap when machine sleeps)
 
   jpa:
     hibernate:
@@ -28,51 +26,56 @@ spring:
         format_sql: true
 
 # ===========================================
-# IMPS BACKEND ROUTING (to send responses)
-# Extract imps_ip and imps_port to build API URL for sending requests to IMPS.
-# Dynamic paths: /imps/{resptype}/{txnId}. No /switch path.
+# IMPS BACKEND ROUTING (for sending responses back to IMPS)
 # ===========================================
+# Endpoint path is built dynamically: base-path / resptype / txnId
+# e.g. base-path: /imps → /imps/resppay/{txnId}, /imps/respchktxn/{txnId}, etc.
 imps:
-  imps_ip: localhost
-  imps_port: 8081   # IMPS HTTP port
-  endpoints:
-    resppay: /imps/resppay
-    respchktxn: /imps/respchktxn
-    resphbt: /imps/resphbt
-    resplistaccpvd: /imps/resplistaccpvd
-    respvaladd: /imps/respvaladd
+  imps_ip: 192.168.1.38
+  imps_port: 8081
+  base-path: /imps
 
 # ===========================================
-# LOGGING (optional: set to ERROR to hide HikariCP housekeeper warning)
-# The "thread starvation or clock leap" warning is harmless (e.g. machine sleep or brief load).
-# ===========================================
-logging:
-  level:
-    com.zaxxer.hikari.pool.HikariPool: WARN   # set to ERROR to suppress housekeeper delta warning
-
-# ===========================================
-# SOCKET SERVER (TCP – length-prefixed ISO) – DEFAULT
+# SOCKET SERVER (TCP – length-prefixed ISO)
 # IMPS connects; Switch receives [4-byte length][ISO], responds [4-byte length][ISO] on same connection.
-# REST optional: server.port 8082 when rest.enabled: true
 # ===========================================
 socket:
+  # true = start TCP socket server; false = only REST on server.port
   enabled: true
-  ssl-enabled: false   # true: listen on ssl-port (9444) with TLS
+  # true = listen on ssl-port with TLS; false = plain TCP on port only
+  ssl-enabled: true
   server:
     bind-host: 0.0.0.0
-    port: 9084
-    ssl-port: 9444
+    port: 9084        # used when ssl-enabled: false
+    ssl-port: 9444    # used when ssl-enabled: true
   ssl:
     key-store: file:../certs/switch-keystore.jks
     key-store-password: IMPS-Backend
 
 # ===========================================
-# MOCK SWITCH CONFIGURATION (auto-response only)
+# MOCK BEHAVIOUR
 # ===========================================
 mock:
-  # Auto-respond: automatically send response after receiving request
+  # true = send response automatically after receiving request; false = wait for manual trigger
   auto-respond: true
-  # Response delay in milliseconds (simulate processing time)
   response-delay-ms: 500
-  # Default response result
   default-result: SUCCESS
+
+# ===========================================
+# PROFILE: ssl – REST over HTTPS
+# ===========================================
+# Use: --spring.profiles.active=ssl
+# HTTPS REST on port 8444. IMPS/Switch POST to https://localhost:8444/imps/{resptype}/{txnId}
+---
+spring:
+  config:
+    activate:
+      on-profile: ssl
+server:
+  port: 8444
+  ssl:
+    enabled: true
+    key-store: file:../certs/switch-keystore.jks
+    key-store-password: IMPS-Backend
+    key-store-type: JKS
+    key-alias: switch

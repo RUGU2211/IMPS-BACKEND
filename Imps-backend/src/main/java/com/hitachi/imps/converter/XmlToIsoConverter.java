@@ -399,6 +399,30 @@ public class XmlToIsoConverter {
     }
 
     /* ===============================
+       RESPLISTACCPVD - XML to ISO 0210
+       =============================== */
+    public ISOMsg convertRespListAccPvd(String xml) {
+        try {
+            ISOMsg iso = new ISOMsg();
+            iso.setPackager(new ImpsIsoPackager());
+            iso.setMTI("0210");
+            String result = XmlUtil.read(xml, "//*[local-name()='Resp']/@result");
+            iso.set(3, "320000");
+            iso.set(11, generateStan());
+            iso.set(12, LocalDateTime.now().format(TIME_FORMAT));
+            iso.set(13, LocalDateTime.now().format(DATE_FORMAT));
+            iso.set(37, generateRrn());
+            iso.set(38, "000000");
+            iso.set(39, "SUCCESS".equalsIgnoreCase(result) ? "00" : "96");
+            iso.set(41, "IMPSTERM");
+            iso.set(49, "356");
+            return iso;
+        } catch (Exception e) {
+            throw new RuntimeException("RespListAccPvd XML to ISO conversion failed", e);
+        }
+    }
+
+    /* ===============================
        REQLISTACCPVD - XML to ISO 0200 (List Request)
        =============================== */
     public ISOMsg convertReqListAccPvd(String xml) {

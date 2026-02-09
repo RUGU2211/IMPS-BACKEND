@@ -1,3 +1,29 @@
+# ===========================================
+# IMPS BACKEND – Application configuration
+# ===========================================
+# HTTP (default): server.port 8081
+# HTTPS: run with --spring.profiles.active=ssl → server.port 8443 (run certs/generate-certs.bat first)
+
+# ===========================================
+# FLAGS (true / false) – when each is used 
+# ===========================================
+# npci.compliant-flow
+#   true  = NPCI connects → Req → IMPS ACK → NPCI closes; then IMPS opens NEW socket to NPCI → Resp → NPCI ACK
+#   false = Same socket: read ACK then response on same connection
+#
+# routing.switch.socket.enabled   true = send to Switch via TCP socket; false = do not use socket
+# routing.switch.rest.enabled     true = send to Switch via REST; false = do not use REST (socket default)
+# ssl.enabled                     true = NPCI socket server uses TLS (ssl-port 9443); false = plain TCP (port 9083)
+# npci.socket.ssl-enabled         true = IMPS connects to NPCI mock with TLS (e.g. 9445)
+# routing.switch.socket.ssl-enabled  true = IMPS connects to Switch with TLS (e.g. 9444)
+# imps.heartbeat.switch-check-enabled  true = ping each bank switch periodically and update institution_master.active
+
+# ===========================================
+# SERVER (HTTP default; HTTPS via profile 'ssl' below)
+# ===========================================
+server:
+  port: 8081
+
 spring:
   application:
     name: Imps-backend
@@ -16,37 +42,23 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
-server:
-  port: 8081
-
 # ===========================================
-# ROUTING CONFIGURATION
+# ROUTING
 # ===========================================
-# Flow: Receive ReqPay from NPCI → read Head @orgId (request_org_id) → lookup institution_master where request_org_id = orgId
-#       → get switch_ip, switch_port → forward to switch.
-# Primary: institution_master (DB). Fallback: this routing section when no matching institution.
-#
 # NPCI → IMPS: {server.port}/imps/{reqtype}/{txn_id}
-# IMPS → Switch: institution_master.switch_ip:switch_port (socket 9084) or fallback below
+# IMPS → Switch: institution_master (switch_ip, switch_port) or fallback below (socket 9084 / 9444)
 # Switch → IMPS: {server.port}/imps/{resptype}/{txn_id}
-# IMPS → NPCI: routing.npci.base-url (REST) or npci.socket.host:port (socket, when npci.compliant-flow: true)
-#
-# NPCI-compliant flow (npci.compliant-flow: true):
-#   Phase 1: NPCI connects → Req → IMPS ACK → NPCI closes
-#   Phase 3: IMPS opens NEW socket to npci.socket.host:port → Resp → NPCI ACK → IMPS closes
+# IMPS → NPCI: routing.npci.base-url (REST) or npci.socket (when npci.compliant-flow: true)
+# ===========================================
 
-
-# true: You read ACK once; IMPS sends the actual response to mock_npci:9085 on another connection.
-# false: You read twice (ACK, then response on the same socket).
-
-npci:  
+npci:
   compliant-flow: true
   socket:
-    host: ${NPCI_SOCKET_HOST:192.168.1.38}
-    port: ${NPCI_SOCKET_PORT:9085}
-    ssl-enabled: false
-    # trust-store: npci-truststore.jks
-    # trust-store-password: IMPS-Backend
+    host: 192.168.1.38
+    port: 9445
+    ssl-enabled: true
+    trust-store: E:\Hitachi_Project/IMPS-BACKEND/certs/imps-truststore.jks
+    trust-store-password: IMPS-Backend
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
 
@@ -55,61 +67,77 @@ routing:
     base-url: http://localhost:8083
     endpoints:
       ack: /npci/ack
-
   switch:
     base-url: http://localhost:8082
-    # Fallback when institution_master has no matching request_org_id. Socket default.
     socket:
       enabled: true
       host: localhost
       port: 9084
-      ssl-enabled: false
-      # trust-store: switch-truststore.jks
-      # trust-store-password: IMPS-Backend
+      ssl-enabled: true
+      trust-store: E:\Hitachi_Project/IMPS-BACKEND/certs/switch-truststore.jks
+      trust-store-password: IMPS-Backend
     rest:
-      enabled: false   # Optional: use REST when true; socket default
+      enabled: false
 
 # ===========================================
-# SSL/TLS (optional)
-# ssl.enabled: true → NpciSocketServer uses SSLServerSocket on port 9443 (or socket.server.npci.ssl-port)
+# SSL/TLS – NPCI socket server (inbound)
 # ===========================================
+# ssl.enabled true → NpciSocketServer uses SSLServerSocket on ssl-port (9443)
 ssl:
-  enabled: false
-  key-store: file:../certs/imps-keystore.jks
+  enabled: true
+  key-store: E:\Hitachi_Project/IMPS-BACKEND/certs/imps-keystore.jks
   key-store-password: IMPS-Backend
   key-alias: imps
-  trust-store: file:../certs/imps-truststore.jks
+  trust-store: "file:E:\Hitachi_Project/IMPS-BACKEND/certs/imps-truststore.jks"
   trust-store-password: IMPS-Backend
   client-auth: none   # none | want | need (need = mTLS)
 
 # ===========================================
-# NPCI SOCKET (TCP server – length-prefixed XML)
-# IMPS listens; NPCI connects and sends [4-byte length][XML]. Response: [4-byte length][XML] on same connection.
-# When ssl.enabled: true, uses port 9443 (socket.server.npci.ssl-port).
+# SOCKET SERVERS
 # ===========================================
+# NPCI → IMPS: [4-byte length][XML] on port 9083 / 9443 (ssl.enabled)
+# Switch → IMPS (reverse): [4-byte length][ISO] on port 9086 / 9446 (same connection pattern)
 socket:
   enabled: true
   server:
     bind-host: 0.0.0.0
     npci:
       port: 9083
-      ssl-port: 9443   # Used when ssl.enabled: true
-  # Max XML size (bytes); response wait timeout when waiting for Switch callback
+      ssl-port: 9443
+    switch:
+      enabled: true
+      port: 9086
+      ssl-port: 9446
   max-xml-size: 1048576
   response-timeout-seconds: 60
 
 # ===========================================
-# API VERSION
+# IMPS API & HEARTBEAT
 # ===========================================
 imps:
   api:
     version: "2.1"
   org-id: "BANK01"
-
-  # Switch check: IMPS TCP pings each bank switch every 3 min, updates institution_master.active.
-  # Console shows UP/DOWN banks with contact details. No auto ReqHbt from NPCI/Switch.
-  # Manual ReqHbt (socket, HTTP, SSL) triggers full flow: DB check, response, log to transaction + message_audit_log.
   heartbeat:
     switch-check-enabled: true
-    switch-check-interval-ms: 180000   # Every 3 minutes
-    switch-check-initial-delay-ms: 10000   # First check 10 seconds after startup
+    switch-check-interval-ms: 180000
+    switch-check-initial-delay-ms: 10000
+
+# ===========================================
+# PROFILE: ssl – REST over HTTPS (optional)
+# ===========================================
+# Use: --spring.profiles.active=ssl
+# Switch can POST to https://localhost:8443/imps/{resptype}/{txnId}
+---
+spring:
+  config:
+    activate:
+      on-profile: ssl
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: file:E:\Hitachi_Project/IMPS-BACKEND/certs/imps-keystore.jks
+    key-store-password: IMPS-Backend
+    key-store-type: JKS
+    key-alias: imps

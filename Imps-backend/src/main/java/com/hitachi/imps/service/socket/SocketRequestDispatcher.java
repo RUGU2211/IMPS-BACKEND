@@ -33,33 +33,38 @@ public class SocketRequestDispatcher {
 
     /** Run the request or response. Req*: response via pendingStore. Resp*: forward to Switch, caller returns ACK. */
     public void dispatch(String xml, String txnId, String msgType) {
+        dispatch(xml, txnId, msgType, null);
+    }
+
+    /** Dispatch with already-extracted reqMsgId (single check at socket entry). */
+    public void dispatch(String xml, String txnId, String msgType, String reqMsgId) {
         switch (msgType != null ? msgType : "") {
             case "ReqPay":
-                reqPayService.processFromNpci(xml, txnId);
+                reqPayService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "RespPay":
-                respPayService.processFromNpci(xml, txnId);
+                respPayService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "ReqChkTxn":
-                reqChkTxnService.processFromNpci(xml, txnId);
+                reqChkTxnService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "RespChkTxn":
-                respChkTxnService.processFromNpci(xml, txnId);
+                respChkTxnService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "ReqHbt":
-                reqHbtService.processFromNpci(xml, txnId);
+                reqHbtService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "ReqListAccPvd":
-                reqListAccPvdService.processFromNpci(xml, txnId);
+                reqListAccPvdService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "RespListAccPvd":
-                respListAccPvdService.processFromNpci(xml, txnId);
+                respListAccPvdService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "ReqValAdd":
-                reqValAddService.processFromNpci(xml, txnId);
+                reqValAddService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             case "RespValAdd":
-                respValAddService.processFromNpci(xml, txnId);
+                respValAddService.processFromNpci(xml, txnId, reqMsgId);
                 break;
             default:
                 throw new IllegalArgumentException("Unknown message type: " + msgType);

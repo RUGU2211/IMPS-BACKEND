@@ -36,7 +36,17 @@ public class RespChkTxnService {
     @Async
     public void processAsync(String xml, String pathTxnId) {
         try {
-            processFromNpci(xml, pathTxnId);
+            processFromNpci(xml, pathTxnId, null);
+        } catch (Exception e) {
+            System.err.println("RespChkTxnService (NPCI) ERROR: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    @Async
+    public void processAsync(String xml, String pathTxnId, String reqMsgId) {
+        try {
+            processFromNpci(xml, pathTxnId, reqMsgId);
         } catch (Exception e) {
             System.err.println("RespChkTxnService (NPCI) ERROR: " + e.getMessage());
             e.printStackTrace();
@@ -44,7 +54,11 @@ public class RespChkTxnService {
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
-        String msgId = xmlParsingService.extractMsgId(xml);
+        processFromNpci(xml, pathTxnId, null);
+    }
+
+    public void processFromNpci(String xml, String pathTxnId, String knownReqMsgId) {
+        String msgId = (knownReqMsgId != null && !knownReqMsgId.isBlank()) ? knownReqMsgId : xmlParsingService.extractMsgId(xml);
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : xmlParsingService.extractTxnId(xml);
         if (txnId == null || txnId.isBlank()) txnId = msgId;
         auditService.saveRaw(txnId, "NPCI_RESPCHKTXN_XML_IN", xml);

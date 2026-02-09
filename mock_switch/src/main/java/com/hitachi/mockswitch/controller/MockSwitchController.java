@@ -67,7 +67,7 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPPAY");
         System.out.println("[MOCK_SWITCH] RESPPAY received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPPAY");
-        responseService.forwardIsoToBackend(isoBytes, "/imps/resppay/" + txnId, "RESPPAY");
+        responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resppay", txnId), "RESPPAY");
         return buildAck("RespPay");
     }
 
@@ -76,7 +76,7 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPCHKTXN");
         System.out.println("[MOCK_SWITCH] RESPCHKTXN received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPCHKTXN");
-        responseService.forwardIsoToBackend(isoBytes, "/imps/respchktxn/" + txnId, "RESPCHKTXN");
+        responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respchktxn", txnId), "RESPCHKTXN");
         return buildAck("RespChkTxn");
     }
 
@@ -87,7 +87,7 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPVALADD");
         System.out.println("[MOCK_SWITCH] RESPVALADD received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPVALADD");
-        responseService.forwardIsoToBackend(isoBytes, "/imps/respvaladd/" + txnId, "RESPVALADD");
+        responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respvaladd", txnId), "RESPVALADD");
         return buildAck("RespValAdd");
     }
 
@@ -96,7 +96,7 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPLISTACCPVD");
         System.out.println("[MOCK_SWITCH] RESPLISTACCPVD received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPLISTACCPVD");
-        responseService.forwardIsoToBackend(isoBytes, "/imps/resplistaccpvd/" + txnId, "RESPLISTACCPVD");
+        responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resplistaccpvd", txnId), "RESPLISTACCPVD");
         return buildAck("RespListAccPvd");
     }
 

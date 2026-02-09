@@ -98,85 +98,88 @@ public class ImpsController {
         return impsInboundService.handleReqValAdd(xml, txnId, restAckSender());
     }
 
-    // ---------- Switch → IMPS (ISO, Req*) ----------
-    @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String reqpayIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    // ---------- Switch → IMPS (ISO, Req*): reverse flow – Switch sends Req ISO, IMPS forwards to NPCI, returns Resp ISO -----
+    @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] reqpayIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] ReqPay ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("ReqPay", txnId);
-        reqPayService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] respIso = reqPayService.processFromSwitchSync(isoBytes, txnId);
+        return orIsoAck(respIso, isoBytes);
     }
 
-    @PostMapping(value = "/reqchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String reqchktxnIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/reqchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] reqchktxnIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] ReqChkTxn ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("ReqChkTxn", txnId);
-        reqChkTxnService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] respIso = reqChkTxnService.processFromSwitchSync(isoBytes, txnId);
+        return orIsoAck(respIso, isoBytes);
     }
 
     @PostMapping(value = "/reqhbt/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] reqhbtIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] ReqHbt ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        return reqHbtService.processFromSwitch(isoBytes, txnId);
+        byte[] respIso = reqHbtService.processFromSwitch(isoBytes, txnId);
+        return respIso != null ? respIso : new byte[0];
     }
 
-    @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String reqlistaccpvdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] reqlistaccpvdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] ReqListAccPvd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("ReqListAccPvd", txnId);
-        reqListAccPvdService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] respIso = reqListAccPvdService.processFromSwitchSync(isoBytes, txnId);
+        return orIsoAck(respIso, isoBytes);
     }
 
-    @PostMapping(value = "/reqvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String reqvaladdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/reqvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] reqvaladdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] ReqValAdd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("ReqValAdd", txnId);
-        reqValAddService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] respIso = reqValAddService.processFromSwitchSync(isoBytes, txnId);
+        return orIsoAck(respIso, isoBytes);
     }
 
-    // ---------- Switch → IMPS (ISO, Resp*) ----------
-    @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String resppay(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    private byte[] orIsoAck(byte[] respIso, byte[] reqIso) {
+        if (respIso != null && respIso.length > 0) return respIso;
+        byte[] ack = ackService.buildIsoAckFromResponse(reqIso);
+        return ack != null ? ack : new byte[0];
+    }
+
+    // ---------- Switch → IMPS (ISO, Resp*): receive ISO response from Switch, process it, return ISO ACK ----------
+    @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] resppay(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] RespPay ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("RespPay", txnId);
         respPayService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        return isoAck != null ? isoAck : new byte[0];
     }
 
-    @PostMapping(value = "/respchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String respchktxn(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/respchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] respchktxn(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] RespChkTxn ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("RespChkTxn", txnId);
         respChkTxnService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        return isoAck != null ? isoAck : new byte[0];
     }
 
-    @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String resplistaccpvd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] resplistaccpvd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] RespListAccPvd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("RespListAccPvd", txnId);
         respListAccPvdService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        return isoAck != null ? isoAck : new byte[0];
     }
 
-    @PostMapping(value = "/respvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
-    public String respvaladd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    @PostMapping(value = "/respvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+    public byte[] respvaladd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("[IMPS] RespValAdd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
-        String ack = ackService.buildAck("RespValAdd", txnId);
         respValAddService.processAsync(isoBytes, txnId);
-        return ack;
+        byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        return isoAck != null ? isoAck : new byte[0];
     }
 
     private static String formatIsoForConsole(byte[] data) {

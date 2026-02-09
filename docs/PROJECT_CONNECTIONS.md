@@ -4,13 +4,15 @@ Two databases: **imps_db** (IMPS Backend) and **switch_db** (Mock Switch).
 
 ## Ports and roles
 
-| Service            | HTTP Port | Socket Port | SSL Socket Port | Role |
-|--------------------|-----------|-------------|-----------------|------|
-| **Imps-backend**   | 8081 | 9083 | 9443 | NPCI XML ↔ Switch ISO; socket server; heartbeat; imps_db |
-| **mock_switch** | 8082 | 9084 | 9444 | Mock Switch (ISO 8583); switch_db |
-| **mock_npci** | 8083 | 9085 | 9445 | Mock NPCI (XML); stateless |
+| Service            | HTTP Port | HTTPS Port | Socket TCP | Socket TLS | Role |
+|--------------------|-----------|------------|------------|------------|------|
+| **Imps-backend**   | 8081 | 8443 (profile `ssl`) | 9083 | 9443 | NPCI XML ↔ Switch ISO; socket server; heartbeat; imps_db |
+| **mock_switch** | 8082 | 8444 (profile `ssl`) | 9084 | 9444 | Mock Switch (ISO 8583); switch_db |
+| **mock_npci** | 8083 | 8445 (profile `ssl`) | 9085 | 9445 | Mock NPCI (XML); stateless |
 
-**SSL:** When `ssl.enabled: true`, IMPS listens on 9443. When `npci.socket.ssl-enabled: true`, IMPS connects to NPCI on 9445. When `routing.switch.socket.ssl-enabled: true`, IMPS connects to Switch on 9444.
+**Connection matrix:** Use **HTTP** (8081) or **HTTPS** (8443) for REST; use **TCP** (9083) or **TLS** (9443) for socket. Same pattern for Switch (9084/9444) and NPCI Mock (9085/9445). Postman: see [POSTMAN.md](POSTMAN.md). Socket testing: see [socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md) and [TESTING_GUIDE.md](TESTING_GUIDE.md).
+
+**SSL/TLS:** When `ssl.enabled: true`, IMPS socket server listens on **9443** (TCP on 9083). When `npci.socket.ssl-enabled: true`, IMPS connects to NPCI on 9445. When `routing.switch.socket.ssl-enabled: true`, IMPS connects to Switch on 9444. For REST over HTTPS use `--spring.profiles.active=ssl` (server port **8443**).
 
 ## Database: imps_db (PostgreSQL)
 
@@ -50,8 +52,11 @@ Two databases: **imps_db** (IMPS Backend) and **switch_db** (Mock Switch).
 | Connection | Format | Plain Port | SSL Port |
 |------------|--------|------------|----------|
 | **NPCI → IMPS** | [4 bytes][XML] | 9083 | 9443 |
+| **Switch → IMPS (reverse)** | [4 bytes][ISO] | 9086 | 9446 |
 | **IMPS → Switch** | [4 bytes][ISO] | 9084 | 9444 |
 | **IMPS → NPCI** | [4 bytes][XML] | 9085 | 9445 (when `npci.compliant-flow: true`) |
+
+**Reverse flow (Switch → IMPS):** Same connection pattern as NPCI→IMPS. Switch connects to IMPS on 9086 (TCP) or 9446 (TLS), sends `[4-byte length big-endian][ISO]`, IMPS responds with `[4 bytes][ISO]`. Same flow for TCP/TLS as NPCI→IMPS.
 
 See [socket/SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.md) for SSL setup.
 
@@ -62,6 +67,17 @@ See [socket/SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.md) for SSL setup.
 **npci.compliant-flow: false:** Legacy same-connection flow. Client reads **twice** (ACK, then Resp).
 
 **Message types:** ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd (and Resp*). See [socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md).
+
+## Connection types (TCP, TLS, HTTP, HTTPS)
+
+| Type | IMPS (NPCI) | IMPS (Switch reverse) | How to use |
+|------|-------------|------------------------|------------|
+| **HTTP** | Port 8081 | 8081 | Postman / curl: `http://localhost:8081/imps/...` |
+| **HTTPS** | Port 8443 | 8443 | Run with `--spring.profiles.active=ssl`; Postman: `https://localhost:8443` |
+| **TCP (socket)** | Port 9083 [4 bytes][XML] | Port 9086 [4 bytes][ISO] | Same framing; NPCI uses XML, Switch uses ISO. See SOCKET_GUIDE.md |
+| **TLS (socket)** | Port 9443 | Port 9446 | Same as TCP but with TLS when `ssl.enabled: true` |
+
+**Reverse flow (Switch → IMPS):** Same connection pattern as NPCI→IMPS—`[4 bytes][ISO]` on port 9086 (TCP) or 9446 (TLS). REST `https://{ip}:{port}/imps/{reqtype}/{txn_id}` with binary body is optional; socket is the primary connection type.
 
 ## HTTP flow (optional)
 
