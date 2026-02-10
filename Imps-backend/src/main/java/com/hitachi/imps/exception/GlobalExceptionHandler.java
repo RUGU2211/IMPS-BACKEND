@@ -1,17 +1,27 @@
 package com.hitachi.imps.exception;
 
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import com.hitachi.imps.converter.RespPaySpec;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    /** Rule 020: Head ts = ISO with up to 3 fractional seconds. */
+    private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     /**
      * Duplicate txn_id in URL/request - reject with 409.
@@ -88,6 +98,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Missing or empty request body (e.g. POST to /imps/reqpay/{txnId} with no body).
+     * ISO endpoints need: Content-Type: application/octet-stream and binary ISO body.
+     * XML endpoints need: Content-Type: application/xml and XML body.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<String> handleMissingBody(HttpMessageNotReadableException ex) {
+        log.warn("Request body missing or not readable: {}", ex.getMessage());
+        String message = "Request body is required. "
+            + "For ISO (reverse flow): use Content-Type: application/octet-stream and send binary ISO 8583 in body. "
+            + "For XML (NPCI flow): use Content-Type: application/xml and send XML in body.";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.TEXT_PLAIN).body(message);
+    }
+
+    /**
      * NPCI Duplicate Transaction Handling
      * Response Code = 94 (MANDATORY)
      */
@@ -103,20 +127,24 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Fallback - System Error
+     * Fallback - System Error (errCode 96).
+     * If the cause is missing body, return 400 instead of 96 (handles wrapped HttpMessageNotReadableException).
      */
     @ExceptionHandler(Exception.class)
-    public String handleGeneric(Exception ex) {
+    public Object handleGeneric(Exception ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            if (cause instanceof HttpMessageNotReadableException) {
+                return handleMissingBody((HttpMessageNotReadableException) cause);
+            }
+            cause = cause.getCause();
+        }
+        log.error("IMPS system error (96 SYSTEM_ERROR). Check logs for root cause.", ex);
         String approvalNum = String.valueOf(System.currentTimeMillis()).substring(7);
         String rrn = String.valueOf(System.currentTimeMillis()).substring(1, 13);
-
-        return buildFailureRespPay(
-            UUID.randomUUID().toString(),
-            approvalNum,
-            rrn,
-            "96",
-            "SYSTEM_ERROR"
-        );
+        String reqMsgId = "REQ" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+        String errMsg = ex.getMessage() != null ? RespPaySpec.truncate(ex.getMessage(), 200) : "SYSTEM_ERROR";
+        return buildFailureRespPay(reqMsgId, approvalNum, rrn, "96", errMsg);
     }
 
     /**
@@ -130,7 +158,7 @@ public class GlobalExceptionHandler {
         // Rule 021: Head msgId 35 chars
         String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
         reqMsgId = RespPaySpec.exactLen(reqMsgId, RespPaySpec.RESP_REQMSGID_LEN, '0');
-        String ts = RespPaySpec.truncate(java.time.OffsetDateTime.now().toString(), RespPaySpec.HEAD_TS_MAX);
+        String ts = OffsetDateTime.now().format(HEAD_TS_FORMAT);
         String txnId = RespPaySpec.exactLen("TXN" + System.currentTimeMillis(), RespPaySpec.TXN_ID_LEN, '0');
         String orgId = RespPaySpec.truncate("BANK01", RespPaySpec.HEAD_ORGID_MAX);
         String note = RespPaySpec.truncate("Failure", RespPaySpec.TXN_NOTE_MAX);

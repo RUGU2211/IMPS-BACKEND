@@ -27,8 +27,8 @@ public class RoutingService {
 
     @Autowired
     private InstitutionMasterRepository institutionRepo;
-
-    private final RestTemplate rest = new RestTemplate();
+    @Autowired
+    private RestTemplate rest;
 
     /**
      * Send ISO message to Switch

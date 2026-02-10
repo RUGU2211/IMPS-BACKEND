@@ -1,10 +1,13 @@
 package com.hitachi.imps.controller;
 
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.exception.CommonCodeValidationException;
 import com.hitachi.imps.exception.ReqPayValidationException;
 import com.hitachi.imps.service.ImpsInboundService;
@@ -99,44 +102,76 @@ public class ImpsController {
     }
 
     // ---------- Switch → IMPS (ISO, Req*): reverse flow – Switch sends Req ISO, IMPS forwards to NPCI, returns Resp ISO -----
+    private static final String ISO_BODY_REQUIRED = "Request body required (binary ISO 8583). Use Content-Type: application/octet-stream and send ISO bytes. For XML flow use Content-Type: application/xml.";
+
     @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public byte[] reqpayIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    public ResponseEntity<byte[]> reqpayIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
+        if (isoBytes == null || isoBytes.length == 0)
+            return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("[IMPS] ReqPay ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqPayService.processFromSwitchSync(isoBytes, txnId);
-        return orIsoAck(respIso, isoBytes);
+        if (respIso != null && respIso.length > 0) {
+            System.out.println("[IMPS] RespPay ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println(formatIsoForConsole(respIso));
+        }
+        return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
     }
 
     @PostMapping(value = "/reqchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public byte[] reqchktxnIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    public ResponseEntity<byte[]> reqchktxnIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
+        if (isoBytes == null || isoBytes.length == 0)
+            return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("[IMPS] ReqChkTxn ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqChkTxnService.processFromSwitchSync(isoBytes, txnId);
-        return orIsoAck(respIso, isoBytes);
+        if (respIso != null && respIso.length > 0) {
+            System.out.println("[IMPS] RespChkTxn ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println(formatIsoForConsole(respIso));
+        }
+        return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
     }
 
     @PostMapping(value = "/reqhbt/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public byte[] reqhbtIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    public ResponseEntity<byte[]> reqhbtIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
+        if (isoBytes == null || isoBytes.length == 0)
+            return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("[IMPS] ReqHbt ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqHbtService.processFromSwitch(isoBytes, txnId);
-        return respIso != null ? respIso : new byte[0];
+        if (respIso != null && respIso.length > 0) {
+            System.out.println("[IMPS] RespHbt ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println(formatIsoForConsole(respIso));
+        }
+        return ResponseEntity.ok(respIso != null ? respIso : new byte[0]);
     }
 
     @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public byte[] reqlistaccpvdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    public ResponseEntity<byte[]> reqlistaccpvdIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
+        if (isoBytes == null || isoBytes.length == 0)
+            return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("[IMPS] ReqListAccPvd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqListAccPvdService.processFromSwitchSync(isoBytes, txnId);
-        return orIsoAck(respIso, isoBytes);
+        if (respIso != null && respIso.length > 0) {
+            System.out.println("[IMPS] RespListAccPvd ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println(formatIsoForConsole(respIso));
+        }
+        return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
     }
 
     @PostMapping(value = "/reqvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
-    public byte[] reqvaladdIso(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
+    public ResponseEntity<byte[]> reqvaladdIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
+        if (isoBytes == null || isoBytes.length == 0)
+            return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("[IMPS] ReqValAdd ISO received from Switch txnId=" + txnId + ":");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqValAddService.processFromSwitchSync(isoBytes, txnId);
-        return orIsoAck(respIso, isoBytes);
+        if (respIso != null && respIso.length > 0) {
+            System.out.println("[IMPS] RespValAdd ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println(formatIsoForConsole(respIso));
+        }
+        return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
     }
 
     private byte[] orIsoAck(byte[] respIso, byte[] reqIso) {
@@ -194,6 +229,15 @@ public class ImpsController {
             }
             return sb.toString();
         } catch (Exception e) {
+            // Log hex of first 60 bytes to diagnose corrupted body (e.g. UTF-8 re-encoding)
+            if (data != null) {
+                StringBuilder hex = new StringBuilder();
+                int len = Math.min(60, data.length);
+                for (int i = 0; i < len; i++) {
+                    hex.append(String.format("%02X ", data[i] & 0xFF));
+                }
+                System.err.println("[IMPS] ISO unpack failed. First " + len + " bytes (hex): " + hex.toString().trim());
+            }
             return "ISO parse failed: " + e.getMessage();
         }
     }

@@ -104,11 +104,18 @@ public class SwitchSocketServer {
                 byte[] isoBytes = new byte[length];
                 in.readFully(isoBytes);
                 String isoDisplay = formatIsoForConsole(isoBytes);
+                log.info("[MOCK_SWITCH] ISO received from IMPS (socket, length={})", length);
+                log.info("[MOCK_SWITCH] ISO received:\n{}", isoDisplay);
                 System.out.println("[MOCK_SWITCH] ISO received from IMPS:");
                 System.out.println(isoDisplay);
                 String txnId = extractTxnId(isoBytes);
                 byte[] respIso = processIso(isoBytes, txnId);
                 if (respIso != null) {
+                    String respDisplay = formatIsoForConsole(respIso);
+                    log.info("[MOCK_SWITCH] ISO response sent to IMPS (socket, length={})", respIso.length);
+                    log.info("[MOCK_SWITCH] ISO response:\n{}", respDisplay);
+                    System.out.println("[MOCK_SWITCH] ISO response sent to IMPS:");
+                    System.out.println(respDisplay);
                     out.writeInt(respIso.length);
                     out.write(respIso);
                     out.flush();
@@ -118,7 +125,7 @@ public class SwitchSocketServer {
                 }
             }
         } catch (IOException e) {
-            log.debug("IMPS socket closed: {}", clientAddr);
+            log.info("IMPS socket closed: {} ({})", clientAddr, e.getMessage() != null ? e.getMessage() : "no data or connection reset");
         } catch (Exception e) {
             log.error("Switch socket error: {}", clientAddr, e);
         } finally {

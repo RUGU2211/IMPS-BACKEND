@@ -1,10 +1,9 @@
-package com.hitachi.imps.client;
+package com.hitachi.imps.client.switchclient;
 
 import org.jpos.iso.ISOMsg;
 
 /**
  * Sends ISO messages to Switch (socket or REST).
- * Uses institution_master (lookup by request_org_id) for switch_ip/switch_port when requestOrgId provided.
  */
 public interface ISwitchClient {
 

@@ -105,7 +105,7 @@ public class AccountLedgerService {
             payee.setLastUpdatedTime(now);
             accountMasterRepository.save(payee);
 
-            System.out.println("AccountLedger: DEBIT " + amountRupees + " from " + payer.getAccountNumber() + "@" + payer.getIfscCode() + " -> CREDIT to " + payee.getAccountNumber() + "@" + payee.getIfscCode() + " RRN=" + rrn);
+            System.out.println("[MOCK_SWITCH] Ledger: DEBIT " + amountRupees + " from " + payer.getAccountNumber() + "@" + payer.getIfscCode() + " -> CREDIT to " + payee.getAccountNumber() + "@" + payee.getIfscCode() + " RRN=" + rrn);
             return RC_SUCCESS;
 
         } catch (Exception e) {

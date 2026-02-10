@@ -57,7 +57,7 @@ npci:
     host: 192.168.1.38
     port: 9445
     ssl-enabled: true
-    trust-store: E:\Hitachi_Project/IMPS-BACKEND/certs/imps-truststore.jks
+    trust-store: file:E:\Hitachi_Project/certs/imps-truststore.jks
     trust-store-password: IMPS-Backend
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
@@ -74,7 +74,7 @@ routing:
       host: localhost
       port: 9084
       ssl-enabled: true
-      trust-store: E:\Hitachi_Project/IMPS-BACKEND/certs/switch-truststore.jks
+      trust-store: file:E:\Hitachi_Project/certs/switch-truststore.jks
       trust-store-password: IMPS-Backend
     rest:
       enabled: false
@@ -85,10 +85,10 @@ routing:
 # ssl.enabled true → NpciSocketServer uses SSLServerSocket on ssl-port (9443)
 ssl:
   enabled: true
-  key-store: E:\Hitachi_Project/IMPS-BACKEND/certs/imps-keystore.jks
+  key-store: file:E:\Hitachi_Project/certs/imps-keystore.jks
   key-store-password: IMPS-Backend
   key-alias: imps
-  trust-store: "file:E:\Hitachi_Project/IMPS-BACKEND/certs/imps-truststore.jks"
+  trust-store: file:E:\Hitachi_Project/certs/imps-truststore.jks
   trust-store-password: IMPS-Backend
   client-auth: none   # none | want | need (need = mTLS)
 
@@ -122,12 +122,14 @@ imps:
     switch-check-enabled: true
     switch-check-interval-ms: 180000
     switch-check-initial-delay-ms: 10000
+    # When switch_port is in this list, switch-check uses TLS (e.g. mock_switch SSL port 9444)
+    switch-check-ssl-ports: 9444,9443,9445
 
 # ===========================================
 # PROFILE: ssl – REST over HTTPS (optional)
 # ===========================================
-# Use: --spring.profiles.active=ssl
-# Switch can POST to https://localhost:8443/imps/{resptype}/{txnId}
+# Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+# IMPS: https://localhost:8443 | Switch: https://localhost:8082 | NPCI mock: https://localhost:8445
 ---
 spring:
   config:
@@ -137,7 +139,14 @@ server:
   port: 8443
   ssl:
     enabled: true
-    key-store: file:E:\Hitachi_Project/IMPS-BACKEND/certs/imps-keystore.jks
+    key-store: file:E:\Hitachi_Project/certs/imps-keystore.jks
     key-store-password: IMPS-Backend
     key-store-type: JKS
     key-alias: imps
+
+# When ssl profile is active, IMPS calls Switch and NPCI mock over HTTPS
+routing:
+  npci:
+    base-url: https://localhost:8445
+  switch:
+    base-url: https://localhost:8082

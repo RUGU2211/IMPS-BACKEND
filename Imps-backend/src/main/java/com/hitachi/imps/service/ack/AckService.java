@@ -129,6 +129,32 @@ public class AckService {
         if (src.hasField(field)) dst.set(field, src.getString(field));
     }
 
+    /**
+     * Build failure response ISO (0210) for Switch flow when validation fails.
+     * Copies 3, 37, 41, 120 from request; sets DE39=96 (system/validation error).
+     */
+    public byte[] buildFailureRespIso(byte[] reqIsoBytes, String errMsg) {
+        try {
+            ISOMsg req = IsoUtil.unpack(reqIsoBytes, new ImpsIsoPackager());
+            ISOMsg resp = new ISOMsg();
+            resp.setPackager(new ImpsIsoPackager());
+            resp.setMTI("0210");
+            if (req.hasField(3)) resp.set(3, req.getString(3));
+            if (req.hasField(4)) resp.set(4, req.getString(4));
+            if (req.hasField(37)) resp.set(37, req.getString(37));
+            if (req.hasField(41)) resp.set(41, req.getString(41));
+            if (req.hasField(120)) resp.set(120, req.getString(120));
+            resp.set(11, req.hasField(11) ? req.getString(11) : String.format("%06d", System.currentTimeMillis() % 1_000_000));
+            resp.set(12, LocalDateTime.now().format(TIME_FMT));
+            resp.set(13, LocalDateTime.now().format(DATE_FMT));
+            resp.set(38, "000000");
+            resp.set(39, "96");
+            return IsoUtil.pack(resp);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** Build failure response XML with optional ErrMsg (proper NPCI format). */
     private String buildFailureRespWithErrMsg(String api, String reqMsgId, String respCode, String errMsg) {
         String ts = OffsetDateTime.now().format(TS_FORMAT);

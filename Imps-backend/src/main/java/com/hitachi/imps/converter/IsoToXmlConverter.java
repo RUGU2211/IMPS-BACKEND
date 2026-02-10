@@ -7,6 +7,7 @@ import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 /**
@@ -20,6 +21,8 @@ public class IsoToXmlConverter {
     private static final String NAMESPACE = "http://npci.org/upi/schema/";
     private static final String PROD_TYPE = "IMPS";
     private static final String API_VERSION = "2.0";
+    /** Rule 020: Head ts = ISO with up to 3 decimal places (yyyy-MM-dd'T'HH:mm:ss.SSS±hh:mm). */
+    private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     /* ===============================
        REQPAY - ISO 0200 to XML
@@ -63,8 +66,8 @@ public class IsoToXmlConverter {
                     </Payees>
                 </ns2:ReqPay>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
-                    txnId, iso.getString(37), OffsetDateTime.now(),
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    txnId, iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     payerAc != null ? payerAc : "",
                     amount,
                     payeeIfsc != null ? payeeIfsc : "",
@@ -94,7 +97,7 @@ public class IsoToXmlConverter {
      */
     public String convertRespPayToXml(ISOMsg iso) {
         try {
-            String ts = RespPaySpec.truncate(OffsetDateTime.now().toString(), RespPaySpec.HEAD_TS_MAX);
+            String ts = OffsetDateTime.now().format(HEAD_TS_FORMAT);
             // Rule 021: Head msgId 35 chars
             String msgId = "MSG" + UUID.randomUUID().toString().replace("-", "").substring(0, 32);
             String responseCode = iso.getString(39);
@@ -168,9 +171,9 @@ public class IsoToXmlConverter {
                     </Payer>
                 </ns2:ReqChkTxn>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
                     txnId, orgRrn != null ? orgRrn : "", orgTxnId != null ? orgTxnId : "", orgRrn != null ? orgRrn : "",
-                    OffsetDateTime.now(), amount
+                    OffsetDateTime.now().format(HEAD_TS_FORMAT), amount
                 );
         } catch (Exception e) {
             throw new RuntimeException("ISO to ReqChkTxn XML conversion failed", e);
@@ -208,8 +211,8 @@ public class IsoToXmlConverter {
                     </Resp>
                 </ns2:RespChkTxn>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
-                    iso.getString(37), OffsetDateTime.now(),
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.getString(11), result,
                     amount, amount,
                     approvalNum != null ? approvalNum : "000000",
@@ -241,8 +244,8 @@ public class IsoToXmlConverter {
                     <HbtMsg type="%s" value="NA"/>
                 </upi:ReqHbt>
                 """.formatted(
-                    NAMESPACE, OffsetDateTime.now(), msgId,
-                    txnId, OffsetDateTime.now(),
+                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId,
+                    txnId, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     hbtType
                 );
         } catch (Exception e) {
@@ -273,8 +276,8 @@ public class IsoToXmlConverter {
                     <Resp reqMsgId="%s" result="%s"/>
                 </upi:RespHbt>
                 """.formatted(
-                    NAMESPACE, OffsetDateTime.now(), msgId,
-                    txnId, note, OffsetDateTime.now(),
+                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId,
+                    txnId, note, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.hasField(11) ? iso.getString(11) : "", result
                 );
         } catch (Exception e) {
@@ -317,8 +320,8 @@ public class IsoToXmlConverter {
                     </Payee>
                 </ns2:ReqValAdd>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
-                    txnId, OffsetDateTime.now(),
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    txnId, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     ifsc != null ? ifsc : "",
                     acNum != null ? acNum : ""
                 );
@@ -354,8 +357,8 @@ public class IsoToXmlConverter {
                           approvalNum="%s" code="0000" type="PERSON"/>
                 </ns2:RespValAdd>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
-                    iso.getString(37), OffsetDateTime.now(),
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.getString(11), result,
                     ifsc != null ? ifsc : "",
                     acNum != null ? acNum : "",
@@ -387,7 +390,7 @@ public class IsoToXmlConverter {
                 <AccPvdList/>
             </ns2:RespListAccPvd>
             """.formatted(
-                NAMESPACE, API_VERSION, OffsetDateTime.now(), msgId, PROD_TYPE,
+                NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
                 iso.getString(11)
             );
     }

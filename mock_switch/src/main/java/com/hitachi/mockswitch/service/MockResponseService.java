@@ -17,6 +17,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Random;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Mock Response Service
  * 
@@ -24,6 +27,8 @@ import java.util.Random;
  */
 @Service
 public class MockResponseService {
+
+    private static final Logger log = LoggerFactory.getLogger(MockResponseService.class);
 
     @Value("${imps.imps_ip:localhost}")
     private String impsIp;
@@ -80,6 +85,24 @@ public class MockResponseService {
         } catch (ISOException e) {
             System.err.println("Failed to parse ISO: " + e.getMessage());
             return null;
+        }
+    }
+
+    private String formatIsoForConsole(byte[] isoBytes) {
+        try {
+            ISOMsg iso = new ISOMsg();
+            iso.setPackager(packager);
+            iso.unpack(isoBytes);
+            StringBuilder sb = new StringBuilder();
+            sb.append("MTI=").append(iso.getMTI()).append("\n");
+            for (int i = 1; i <= 128; i++) {
+                if (iso.hasField(i)) {
+                    sb.append("DE").append(i).append("=").append(iso.getString(i)).append("\n");
+                }
+            }
+            return sb.toString();
+        } catch (ISOException e) {
+            return "ISO parse failed: " + e.getMessage();
         }
     }
 
@@ -297,17 +320,27 @@ public class MockResponseService {
     private void sendToBackend(ISOMsg iso, String endpoint, String type) {
         try {
             byte[] packed = iso.pack();
+            String respDisplay = formatIsoForConsole(packed);
+            log.info("[MOCK_SWITCH] ISO response sent to IMPS (HTTP {}, length={})", type, packed.length);
+            log.info("[MOCK_SWITCH] ISO response:\n{}", respDisplay);
+            System.out.println("[MOCK_SWITCH] ISO response sent to IMPS:");
+            System.out.println(respDisplay);
             System.out.println("[MOCK_SWITCH] SENDING " + type + " to IMPS Backend " + endpoint + " (" + packed.length + " bytes)");
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             HttpEntity<byte[]> request = new HttpEntity<>(packed, headers);
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<byte[]> response = restTemplate.exchange(
                 getImpsBaseUrl() + endpoint,
                 HttpMethod.POST,
                 request,
-                String.class
+                byte[].class
             );
-            System.out.println("[MOCK_SWITCH] IMPS Backend response: " + response.getStatusCode());
+            byte[] body = response.getBody();
+            System.out.println("[MOCK_SWITCH] IMPS Backend response: " + response.getStatusCode() + (body != null ? " | body " + body.length + " bytes" : ""));
+            if (body != null && body.length > 0) {
+                System.out.println("[MOCK_SWITCH] IMPS response (ISO) received:");
+                System.out.println(formatIsoForConsole(body));
+            }
         } catch (Exception e) {
             System.err.println("Failed to send to IMPS Backend: " + e.getMessage());
         }

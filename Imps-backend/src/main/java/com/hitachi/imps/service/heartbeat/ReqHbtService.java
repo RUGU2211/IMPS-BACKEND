@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.entity.InstitutionMaster;
 import com.hitachi.imps.entity.TransactionEntity;
 import com.hitachi.imps.iso.ImpsIsoPackager;
@@ -38,6 +38,8 @@ public class ReqHbtService {
     private static final String STATUS_SUMMARY = "(ReqPay/ReqChkTxn/ReqValAdd require switch on port 9084)";
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HHmmss");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMdd");
+    /** Rule 020: Head/Txn ts = ISO with up to 3 fractional seconds. */
+    private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     @Autowired private NpciMockClient npciMockClient;
     @Autowired private MessageAuditService auditService;
@@ -79,10 +81,11 @@ public class ReqHbtService {
 
         Map<String, String> hbt = xmlParsingService.parseReqHbt(xml);
         String respMsgId = ResponseIdHelper.responseMsgIdFromRequest(msgId);
+        String txnTs = (hbt.get("txn_ts") != null && !hbt.get("txn_ts").isBlank()) ? hbt.get("txn_ts") : OffsetDateTime.now().format(HEAD_TS_FORMAT);
         String respXml = String.format(
             "<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\"><Head ver=\"1.0\" ts=\"%s\" orgId=\"BANK01\" msgId=\"%s\"/><Txn id=\"%s\" note=\"%s\" refId=\"%s\" refUrl=\"\" ts=\"%s\" type=\"Hbt\"/><Resp reqMsgId=\"%s\" result=\"%s\"/></upi:RespHbt>",
-            OffsetDateTime.now(), respMsgId, txnId != null ? txnId : "", escapeXml(note),
-            hbt.get("ref_id") != null ? hbt.get("ref_id") : "", hbt.get("txn_ts") != null ? hbt.get("txn_ts") : OffsetDateTime.now().toString(), msgId, result);
+            OffsetDateTime.now().format(HEAD_TS_FORMAT), respMsgId, txnId != null ? txnId : "", escapeXml(note),
+            hbt.get("ref_id") != null ? hbt.get("ref_id") : "", txnTs, msgId, result);
         auditService.saveRaw(txnId, "NPCI_RESPHBT_XML_OUT", respXml);
         if ("FAILURE".equals(result)) {
             transactionService.markFailure(txn, respXml);

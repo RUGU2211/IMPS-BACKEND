@@ -1,4 +1,4 @@
-package com.hitachi.imps.client;
+package com.hitachi.imps.client.npci;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -19,9 +19,7 @@ import com.hitachi.imps.config.NpciSocketConfig;
 import com.hitachi.imps.config.SslConfig;
 
 /**
- * Outbound socket client for IMPS → NPCI (Phase 3).
- * Opens new connection to NPCI, sends [4-byte length][Resp XML], reads [4-byte length][ACK], closes.
- * Used when npci.compliant-flow is true.
+ * Outbound socket client for IMPS → NPCI. Sends [4-byte length][Resp XML], reads ACK.
  */
 @Component
 @ConditionalOnProperty(name = "npci.compliant-flow", havingValue = "true")
@@ -33,12 +31,6 @@ public class NpciSocketClient {
     @Autowired
     private NpciSocketConfig npciSocketConfig;
 
-    /**
-     * Send response XML to NPCI. Opens connection, sends [4-byte][XML], reads [4-byte][ACK], closes.
-     *
-     * @param respXml response XML (RespPay, RespHbt, RespChkTxn, RespValAdd, RespListAccPvd)
-     * @return true if sent and ACK received; false on error
-     */
     public boolean sendResponse(String respXml) {
         if (respXml == null || respXml.isBlank()) return false;
         var sock = npciSocketConfig.getSocket();
@@ -47,7 +39,6 @@ public class NpciSocketClient {
         int connectTimeout = sock.getConnectTimeoutMs();
         int readTimeout = sock.getReadTimeoutMs();
         boolean useSsl = sock.isSslEnabled();
-
         try {
             Socket socket;
             if (useSsl) {
@@ -70,7 +61,6 @@ public class NpciSocketClient {
                     out.writeInt(payload.length);
                     out.write(payload);
                     out.flush();
-
                     int ackLen = in.readInt();
                     if (ackLen <= 0 || ackLen > MAX_ACK_SIZE) {
                         log.warn("Invalid ACK length from NPCI: {}", ackLen);
@@ -78,8 +68,6 @@ public class NpciSocketClient {
                     }
                     byte[] ackPayload = new byte[ackLen];
                     in.readFully(ackPayload);
-                    String ack = new String(ackPayload, StandardCharsets.UTF_8);
-                    log.debug("NPCI ACK received: {}", ack.substring(0, Math.min(100, ack.length())));
                     return true;
                 }
             } finally {

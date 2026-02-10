@@ -78,6 +78,12 @@ public class TransactionService {
         repo.save(txn);
     }
 
+    /** Set req_out_date_time only (e.g. for SWITCH_CHECK when connectivity check starts). */
+    public void setReqOutDateTime(TransactionEntity txn) {
+        txn.setReqOutDateTime(now());
+        repo.save(txn);
+    }
+
     /* ===============================
        3️⃣ SUCCESS response
        =============================== */

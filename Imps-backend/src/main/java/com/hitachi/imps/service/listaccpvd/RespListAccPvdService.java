@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.service.TransactionService;

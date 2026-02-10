@@ -14,12 +14,17 @@ import com.hitachi.mockswitch.service.ValidationService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Dynamic: http://localhost:8082/imps/{reqpay|reqchktxn|...}/{txn_id}. IMPS sends here; Switch calls IMPS at http://localhost:8081/imps/{resptype}/{txn_id}.
  */
 @RestController
 @RequestMapping("/imps")
 public class ImpsSwitchMockController {
+
+    private static final Logger log = LoggerFactory.getLogger(ImpsSwitchMockController.class);
 
     @Autowired private MockResponseService responseService;
     @Autowired private ValidationService validationService;
@@ -68,8 +73,11 @@ public class ImpsSwitchMockController {
     @PostMapping(value = "/reqpay/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqpay(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQPAY");
-        System.out.println("[MOCK_SWITCH] REQPAY ISO received from IMPS txnId=" + txnId + ":");
-        System.out.println(formatIsoForConsole(isoBytes));
+        String isoDisplay = formatIsoForConsole(isoBytes);
+        log.info("[MOCK_SWITCH] ISO received from IMPS (HTTP ReqPay txnId={})", txnId);
+        log.info("[MOCK_SWITCH] ISO received:\n{}", isoDisplay);
+        System.out.println("[MOCK_SWITCH] ISO received from IMPS:");
+        System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQPAY");
         if (isoMsg != null) {
             ValidationService.ValidationResult vr = validationService.validateReqPay(isoMsg);
@@ -82,8 +90,11 @@ public class ImpsSwitchMockController {
     @PostMapping(value = "/reqchktxn/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqchktxn(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQCHKTXN");
-        System.out.println("[MOCK_SWITCH] REQCHKTXN ISO received from IMPS txnId=" + txnId + ":");
-        System.out.println(formatIsoForConsole(isoBytes));
+        String isoDisplay = formatIsoForConsole(isoBytes);
+        log.info("[MOCK_SWITCH] ISO received from IMPS (HTTP ReqChkTxn txnId={})", txnId);
+        log.info("[MOCK_SWITCH] ISO received:\n{}", isoDisplay);
+        System.out.println("[MOCK_SWITCH] ISO received from IMPS:");
+        System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQCHKTXN");
         responseService.sendRespChkTxnAsync(isoBytes, txnId);
         return buildAck("ReqChkTxn");
@@ -94,8 +105,11 @@ public class ImpsSwitchMockController {
     @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqlistaccpvd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQLISTACCPVD");
-        System.out.println("[MOCK_SWITCH] REQLISTACCPVD ISO received from IMPS txnId=" + txnId + ":");
-        System.out.println(formatIsoForConsole(isoBytes));
+        String isoDisplay = formatIsoForConsole(isoBytes);
+        log.info("[MOCK_SWITCH] ISO received from IMPS (HTTP ReqListAccPvd txnId={})", txnId);
+        log.info("[MOCK_SWITCH] ISO received:\n{}", isoDisplay);
+        System.out.println("[MOCK_SWITCH] ISO received from IMPS:");
+        System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQLISTACCPVD");
         responseService.sendRespListAccPvdAsync(isoBytes, txnId);
         return buildAck("ReqListAccPvd");
@@ -104,8 +118,11 @@ public class ImpsSwitchMockController {
     @PostMapping(value = "/reqvaladd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqvaladd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQVALADD");
-        System.out.println("[MOCK_SWITCH] REQVALADD ISO received from IMPS txnId=" + txnId + ":");
-        System.out.println(formatIsoForConsole(isoBytes));
+        String isoDisplay = formatIsoForConsole(isoBytes);
+        log.info("[MOCK_SWITCH] ISO received from IMPS (HTTP ReqValAdd txnId={})", txnId);
+        log.info("[MOCK_SWITCH] ISO received:\n{}", isoDisplay);
+        System.out.println("[MOCK_SWITCH] ISO received from IMPS:");
+        System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQVALADD");
         responseService.sendRespValAddAsync(isoBytes, txnId);
         return buildAck("ReqValAdd");

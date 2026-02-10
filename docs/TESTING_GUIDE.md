@@ -35,9 +35,89 @@ cd mock_npci
 mvn spring-boot:run
 ```
 
+**HTTPS (SSL profile)** – use the same command with `-Dspring-boot.run.profiles=ssl` for each app so tests can use HTTPS and fixed ports:
+
+| Service     | HTTP (default) | HTTPS (ssl profile) |
+|------------|----------------|----------------------|
+| IMPS       | 8081           | **8443**             |
+| mock_switch| 8082           | **8082**             |
+| mock_npci  | 8083           | **8445**             |
+
+```powershell
+# Terminal 1 – IMPS (HTTPS 8443)
+cd Imps-backend && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+
+# Terminal 2 – mock_switch (HTTPS 8082)
+cd mock_switch && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+
+# Terminal 3 – mock_npci (HTTPS 8445)
+cd mock_npci && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+```
+
+When IMPS runs with `ssl`, it calls Switch at `https://localhost:8082` and NPCI mock at `https://localhost:8445` (self-signed certs are trusted for dev).
+
 ---
 
-## 2. HTTP (REST) Testing
+## 2. How to check Switch → IMPS connection
+
+The **Switch** sends requests **to** IMPS (reverse flow). You can verify the connection in two ways: **REST (Postman)** or **Socket**.
+
+### Prerequisites
+
+1. **IMPS Backend must be running.**
+   - HTTP only: `cd Imps-backend && mvn spring-boot:run` → IMPS listens on **8081**.
+   - HTTPS (for Postman with 8443): `mvn spring-boot:run -Dspring-boot.run.profiles=ssl` → IMPS listens on **8443**.
+2. Optional: **mock_switch** running if you want IMPS to forward to a switch (8082/8444).
+
+### Option A: Check via Postman (REST / HTTPS)
+
+1. Start IMPS with the **ssl** profile so it listens on **8443**:
+   ```powershell
+   cd E:\Hitachi_Project\Imps-backend
+   mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+   ```
+2. In Postman, open the collection **IMPS API Collection (Dynamic)** → folder **Switch - IMPS flow**.
+3. Pick a request (e.g. **ReqPay (ISO) - Switch to IMPS**).
+4. Set **Body** → **Binary** → **Select file** → choose `postman/samples/iso_reqpay.bin` (or set the path in the request; path is relative to the collection folder).
+5. Set **URL** to `https://192.168.1.38:8443/imps/reqpay/{{txnId}}` (or `https://localhost:8443/...` if testing on the same machine). Disable **SSL certificate verification** in Postman (Settings) for self-signed certs.
+6. Click **Send**.
+
+**Success:** Status **200** and response body is **binary ISO** (or XML if IMPS returns an error in XML).  
+**Connection failure:** Connection refused / ECONNREFUSED → IMPS not running or wrong host/port.  
+**Unpack error (e.g. DE-32):** Body was not sent as binary → use **Body → Binary → file** only.  
+**"NPCI MOCK SEND FAILED … Connection refused":** IMPS forwards ReqPay (and other requests) to the **NPCI mock** on port **8083**. Start **mock_npci** so the full flow works: `cd mock_npci && mvn spring-boot:run`.
+
+### Option B: Check via Socket (TCP or TLS)
+
+Switch → IMPS uses the **same framing** as NPCI → IMPS but with **ISO** instead of XML, on a **different port**:
+
+| Mode | IMPS port | Format        |
+|------|-----------|---------------|
+| TCP  | **9086**  | [4 bytes][ISO] |
+| TLS  | **9446**  | [4 bytes][ISO] |
+
+1. Start IMPS (socket server is on by default; ports 9086 and 9446 are open when `socket.server.switch.enabled: true`).
+2. From the Switch (or a test client), open a TCP connection to **host:9086** (or **host:9446** for TLS).
+3. Send **4 bytes** (big-endian length of the ISO), then the **ISO 8583 bytes**.
+4. Read **4 bytes** (response length), then the **response ISO** bytes.
+
+**Success:** IMPS accepts the connection and returns a response ISO (e.g. 0210 for ReqPay).  
+**Connection failure:** Cannot connect → check IMPS is running, firewall, and that you are using port **9086** (TCP) or **9446** (TLS) for Switch → IMPS (not 9083/9443, which are for NPCI → IMPS).
+
+Sample ISO binaries for socket testing: use the same files under `postman/samples/` (e.g. `iso_reqpay.bin`). Prepend the 4-byte length (big-endian) before sending. See [socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md) for scripts.
+
+### Quick checklist
+
+| Step | Action |
+|------|--------|
+| 1 | IMPS running (`mvn spring-boot:run` or with `ssl` profile for 8443). |
+| 2 | For REST: Postman → **Switch - IMPS flow** → Body **Binary** → select `postman/samples/iso_reqpay.bin` → Send to `https://&lt;host&gt;:8443/imps/reqpay/{{txnId}}`. |
+| 3 | For socket: Connect to **&lt;host&gt;:9086** (TCP) or **&lt;host&gt;:9446** (TLS), send [4 bytes][ISO], read [4 bytes][ISO]. |
+| 4 | Check IMPS console for logs: `[IMPS] ReqPay ISO received from Switch txnId=...` and no unpack error. |
+
+---
+
+## 3. HTTP (REST) Testing
 
 ### Postman
 
@@ -67,7 +147,7 @@ curl -X POST "http://localhost:8081/imps/reqpay/PAY00000000000000000000000000000
 
 ---
 
-## 3. TCP Socket (Plain) Testing
+## 4. TCP Socket (Plain) Testing
 
 **Port:** 9083
 
@@ -108,7 +188,7 @@ Send-SocketXml-Compliant -HostParam localhost -PortParam 9083 -Xml $xml
 
 ---
 
-## 4. TCP Socket with TLS Testing
+## 5. TCP Socket with TLS Testing
 
 ### Step 1: Enable TLS on IMPS
 
@@ -162,7 +242,7 @@ openssl s_client -connect localhost:9443
 
 ---
 
-## 5. HTTP over HTTPS (REST + TLS)
+## 6. HTTP over HTTPS (REST + TLS)
 
 For HTTPS on IMPS (port **8443**):
 
@@ -181,7 +261,7 @@ curl -k https://localhost:8443/imps/reqhbt/HBT00000000000000000000000000000001 -
 
 ---
 
-## 6. Test matrix
+## 7. Test matrix
 
 | API         | HTTP (8081) | HTTPS (8443) | Socket TCP (9083) | Socket TLS (9443) | Switch needed |
 |-------------|-------------|--------------|-------------------|-------------------|---------------|
@@ -195,7 +275,7 @@ curl -k https://localhost:8443/imps/reqhbt/HBT00000000000000000000000000000001 -
 
 ---
 
-## 7. Order of testing
+## 8. Order of testing
 
 1. Start DBs and apply schemas
 2. Generate certs and start all three apps

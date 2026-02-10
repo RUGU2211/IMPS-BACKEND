@@ -1,6 +1,7 @@
 package com.hitachi.imps.service.listaccpvd;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import org.jpos.iso.ISOMsg;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.converter.XmlToIsoConverter;
 import com.hitachi.imps.entity.InstitutionMaster;
 import com.hitachi.imps.util.IsoUtil;
@@ -29,6 +30,8 @@ import com.hitachi.imps.spec.AccPvdSpec;
 public class ReqListAccPvdService {
 
     private static final String UNKNOWN_TXN = "UNKNOWN";
+    /** Rule 020: Head ts = ISO with up to 3 fractional seconds. */
+    private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     @Autowired private InstitutionMasterRepository institutionRepo;
     @Autowired private NpciMockClient npciMockClient;
@@ -83,10 +86,14 @@ public class ReqListAccPvdService {
         processFromSwitchSync(isoBytes, pathTxnId);
     }
 
-    /** Reverse flow: Switch sends Req ISO → IMPS builds Resp from DB → converts to ISO, returns. */
+    /** Reverse flow: Switch sends Req ISO → IMPS builds Resp from DB → converts to ISO, returns. Duplicate txn_id rejected (409). */
     public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
+        if (!UNKNOWN_TXN.equals(txnId))
+            transactionService.validateNewTxnId(txnId);
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQLISTACCPVD_ISO_IN", isoBytes);
+        String reqStored = "<ReqListAccPvd from=\"Switch\"/>";
+        TransactionEntity txn = transactionService.createRequest(txnId, reqStored, "LISTACCPVD");
         List<InstitutionMaster> banks = institutionRepo.findByActiveTrue();
         String respXml = buildRespListAccPvd(txnId, banks);
         auditService.saveRaw(txnId, "SWITCH_RESPLISTACCPVD_XML", respXml);
@@ -94,9 +101,11 @@ public class ReqListAccPvdService {
             ISOMsg respIso = xmlToIsoConverter.convertRespListAccPvd(respXml);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPLISTACCPVD_ISO_OUT", respBytes);
+            transactionService.markSuccess(txn, respXml, null, null);
             return respBytes;
         } catch (Exception e) {
             System.err.println("IMPS: RespListAccPvd XML to ISO failed: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
     }
@@ -120,7 +129,7 @@ public class ReqListAccPvdService {
             accList.append(accPvd);
         }
         String respMsgId = ResponseIdHelper.responseMsgIdFromRequest(reqMsgId);
-        String ts = OffsetDateTime.now().toString();
+        String ts = OffsetDateTime.now().format(HEAD_TS_FORMAT);
         return "<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn type=\"ListAccPvd\"/><Resp reqMsgId=\"" + escapeXml(reqMsgId) + "\" result=\"SUCCESS\"/><AccPvdList>" + accList + "</AccPvdList></ns2:RespListAccPvd>";
     }
 

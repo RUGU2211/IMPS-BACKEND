@@ -1,8 +1,11 @@
 # IMPS Request APIs – Copy-Paste Bodies with {placeholders}
 
-**Usage:** Copy the XML block, then replace each `{placeholder}` with your value. All IDs must be **35 chars** (3 BPC + 32) for socket.
+This doc covers **two flows only**: (1) **NPCI → IMPS** (XML request bodies below) and (2) **Switch → IMPS** (binary ISO; see [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md)).
 
-**Paths:** `{baseUrl}/imps/{reqtype}/{txnId}` — e.g. `http://localhost:8081/imps/reqpay/{txnId}`
+**Usage:** Copy the XML block, then replace each `{placeholder}` with your value. All IDs must be **35 chars** (3 BPC + 32).
+
+**Paths:** `{baseUrl}/imps/{reqtype}/{txnId}` — e.g. `https://192.168.1.38:8443/imps/reqpay/{txnId}`  
+**Content-Type:** `application/xml` for NPCI → IMPS. For Switch → IMPS (ISO): `application/octet-stream` and binary ISO 8583 (no XML body; see socket guide).
 
 **Source:** [NPCI_IMPS_Message_Formats.md](NPCI_IMPS_Message_Formats.md) | [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md)
 
@@ -12,7 +15,7 @@
 
 | Placeholder | Example | Description |
 |-------------|---------|-------------|
-| `{baseUrl}` | http://localhost:8081 | IMPS REST base URL |
+| `{baseUrl}` | https://192.168.1.38:8443 | IMPS REST base URL (HTTPS, port 8443 with ssl profile) |
 | `{orgId}` | BANK01 | Organisation ID (3–20 chars) |
 | `{msgId}` | BAN5t2Dk18UFMIMFENLBga12345678901234 | Head msgId, 35 chars |
 | `{txnId}` | BAN5t2Dk18UFMIMFENLBgb12345678901234 | Txn id, 35 chars |
@@ -32,6 +35,17 @@
 | `{initiationMode}` | 00 | 00=Default, 12=FIR |
 | `{mmid}` | 4002111 | MMID (ValAdd) |
 | `{mobNum}` | 919494916511 | Mobile number (ValAdd) |
+
+---
+
+## Two flows (aligned with Postman)
+
+| Flow | Direction | Body | Path pattern |
+|------|-----------|------|--------------|
+| **NPCI - IMPS req flow** | NPCI → IMPS | XML (copy-paste from sections below) | `{baseUrl}/imps/{reqpay,reqchktxn,reqhbt,reqlistaccpvd,reqvaladd}/{txnId}` |
+| **Switch - IMPS flow** | Switch → IMPS | Binary ISO 8583 | Same path; `Content-Type: application/octet-stream`. See [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md). |
+
+Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS req flow* and *Switch - IMPS flow* only.
 
 ---
 
@@ -403,7 +417,7 @@
 ## Quick fill example
 
 ```
-{baseUrl}     = http://localhost:8081
+{baseUrl}     = https://192.168.1.38:8443
 {orgId}       = BANK01
 {msgId}       = BAN5t2Dk18UFMIMFENLBga12345678901234
 {txnId}       = BAN5t2Dk18UFMIMFENLBgb12345678901234

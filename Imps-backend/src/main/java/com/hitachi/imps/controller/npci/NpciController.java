@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.exception.CommonCodeValidationException;
 import com.hitachi.imps.exception.ReqPayValidationException;
 import com.hitachi.imps.service.ImpsInboundService;

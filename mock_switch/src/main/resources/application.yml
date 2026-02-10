@@ -5,6 +5,11 @@
 server:
   port: 8082
 
+# Hibernate SQL logging (reverse flow: account_master lookups for ValAdd/Pay etc.)
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+
 spring:
   application:
     name: mock-switch
@@ -64,15 +69,15 @@ mock:
 # ===========================================
 # PROFILE: ssl – REST over HTTPS
 # ===========================================
-# Use: --spring.profiles.active=ssl
-# HTTPS REST on port 8444. IMPS/Switch POST to https://localhost:8444/imps/{resptype}/{txnId}
+# Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+# HTTPS REST on port 8082. IMPS POST to https://localhost:8082/imps/{resptype}/{txnId}
 ---
 spring:
   config:
     activate:
       on-profile: ssl
 server:
-  port: 8444
+  port: 8082
   ssl:
     enabled: true
     key-store: file:../certs/switch-keystore.jks

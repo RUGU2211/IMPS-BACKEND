@@ -6,16 +6,21 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Dynamic IMPS API mock: /imps/{apiType}/req|resp/{txnId}
- * Receives XML from IMPS and returns ACK (same txnId used for whole flow).
+ * Receives XML from IMPS Backend (when it forwards Switch→IMPS requests to NPCI mock) and returns ACK.
+ * Paths used by Imps-backend: /imps/reqpay/{txnId}, /imps/reqchktxn/{txnId}, /imps/reqvaladd/{txnId}, /imps/hbt/req/{txnId}.
+ * Also supports /imps/pay/req/, /imps/chktxn/req/, etc.
  */
 @RestController
 @RequestMapping("/imps")
 public class ImpsMockController {
 
-    @PostMapping(value = "/pay/req/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    @PostMapping(value = { "/reqpay/{txnId}", "/pay/req/{txnId}" }, consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String payReq(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
-        return logAndAck("ReqPay", txnId, xml, request);
+        System.out.println("[MOCK_NPCI] ReqPay received from IMPS txnId=" + txnId + ":");
+        System.out.println(xml);
+        String respPay = buildRespPaySuccess(xml, txnId);
+        System.out.println("[MOCK_NPCI] RespPay (SUCCESS) sent to IMPS");
+        return respPay;
     }
 
     @PostMapping(value = "/pay/resp/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
@@ -23,7 +28,7 @@ public class ImpsMockController {
         return logAndAck("RespPay", txnId, xml, request);
     }
 
-    @PostMapping(value = "/chktxn/req/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    @PostMapping(value = { "/reqchktxn/{txnId}", "/chktxn/req/{txnId}" }, consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String chktxnReq(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         return logAndAck("ReqChkTxn", txnId, xml, request);
     }
@@ -53,7 +58,7 @@ public class ImpsMockController {
         return logAndAck("RespListAccPvd", txnId, xml, request);
     }
 
-    @PostMapping(value = "/valadd/req/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
+    @PostMapping(value = { "/reqvaladd/{txnId}", "/valadd/req/{txnId}" }, consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String valaddReq(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
         return logAndAck("ReqValAdd", txnId, xml, request);
     }
@@ -91,5 +96,70 @@ public class ImpsMockController {
             "<ns2:Ack xmlns:ns2=\"http://npci.org/upi/schema/\" xmlns:ns3=\"http://npci.org/cm/schema/\" api=\"%s\" reqMsgId=\"%s\" ts=\"%s\">\n</ns2:Ack>",
             api, reqMsgId != null ? reqMsgId : "", ts
         );
+    }
+
+    /** Build minimal RespPay SUCCESS so IMPS can convert to ISO and return to Switch. */
+    private String buildRespPaySuccess(String reqPayXml, String txnId) {
+        String msgId = extractMsgId(reqPayXml);
+        String reqMsgId = msgId != null ? msgId : (txnId != null ? txnId : "");
+        String ts = java.time.OffsetDateTime.now().toString();
+        String approvalNum = String.format("%06d", (int)(Math.random() * 1_000_000));
+        String amount = extractAmount(reqPayXml);
+        String payeeAcNum = extractPayeeAcNum(reqPayXml);
+        String payeeIfsc = extractPayeeIfsc(reqPayXml);
+        String respMsgId = "R" + (reqMsgId.length() >= 34 ? reqMsgId.substring(1, 34) : reqMsgId);
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            "<ns2:RespPay xmlns:ns2=\"http://npci.org/upi/schema/\">\n" +
+            "<Head ver=\"2.0\" ts=\"" + escapeXml(ts) + "\" orgId=\"NPCI\" msgId=\"" + escapeXml(respMsgId) + "\" prodType=\"IMPS\"/>\n" +
+            "<Txn id=\"" + escapeXml(txnId != null ? txnId : "") + "\" note=\"Mock\" refId=\"\" custRef=\"\" refUrl=\"\" ts=\"" + escapeXml(ts) + "\" purpose=\"\" type=\"PAY\" subType=\"PAY\" initiationMode=\"\" refCategory=\"\"/>\n" +
+            "<Resp reqMsgId=\"" + escapeXml(reqMsgId) + "\" result=\"SUCCESS\">\n" +
+            "<Ref type=\"PAYEE\" seqNum=\"1\" addr=\"" + escapeXml(payeeAcNum != null ? payeeAcNum : "") + "@bank\" regName=\"BENEFICIARY\" acNum=\"" + escapeXml(payeeAcNum != null ? payeeAcNum : "") + "\" IFSC=\"" + escapeXml(payeeIfsc != null ? payeeIfsc : "") + "\" code=\"0000\" accType=\"SAVINGS\" settAmount=\"" + escapeXml(amount != null ? amount : "1000.00") + "\" orgAmount=\"" + escapeXml(amount != null ? amount : "1000.00") + "\" settCurrency=\"INR\" approvalNum=\"" + approvalNum + "\" respCode=\"00\"/>\n" +
+            "</Resp>\n" +
+            "</ns2:RespPay>";
+    }
+
+    private static String escapeXml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    private String extractAmount(String xml) {
+        try {
+            int i = xml.indexOf("Amount value=\"");
+            if (i != -1) {
+                i += 14;
+                int j = xml.indexOf("\"", i);
+                if (j != -1) return xml.substring(i, j);
+            }
+        } catch (Exception e) { /* ignore */ }
+        return null;
+    }
+
+    private String extractPayeeAcNum(String xml) {
+        try {
+            int payeeStart = xml.indexOf("<Payee");
+            if (payeeStart == -1) return null;
+            int acnum = xml.indexOf("name=\"ACNUM\" value=\"", payeeStart);
+            if (acnum != -1) {
+                acnum += 19;
+                int end = xml.indexOf("\"", acnum);
+                if (end != -1) return xml.substring(acnum, end);
+            }
+        } catch (Exception e) { /* ignore */ }
+        return null;
+    }
+
+    private String extractPayeeIfsc(String xml) {
+        try {
+            int payeeStart = xml.indexOf("<Payee");
+            if (payeeStart == -1) return null;
+            int ifsc = xml.indexOf("name=\"IFSC\" value=\"", payeeStart);
+            if (ifsc != -1) {
+                ifsc += 18;
+                int end = xml.indexOf("\"", ifsc);
+                if (end != -1) return xml.substring(ifsc, end);
+            }
+        } catch (Exception e) { /* ignore */ }
+        return null;
     }
 }

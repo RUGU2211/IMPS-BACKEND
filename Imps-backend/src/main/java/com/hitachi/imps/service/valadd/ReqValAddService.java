@@ -8,8 +8,8 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hitachi.imps.client.NpciMockClient;
-import com.hitachi.imps.client.ISwitchClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.switchclient.ISwitchClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
@@ -23,6 +23,8 @@ import com.hitachi.imps.service.XmlParsingService;
 import com.hitachi.imps.service.ack.AckService;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.validation.InstitutionValidationService;
+import com.hitachi.imps.service.validation.CommonCodeValidationService;
+import com.hitachi.imps.exception.CommonCodeValidationException;
 
 /** ReqValAdd: NPCI (XML) and Switch (ISO). account_master validation done in Switch only – IMPS forwards to Switch. */
 @Service
@@ -41,6 +43,7 @@ public class ReqValAddService {
     @Autowired(required = false) private INpciResponseSender npciResponseSender;
     @Autowired private AckService ackService;
     @Autowired private InstitutionValidationService institutionValidationService;
+    @Autowired private CommonCodeValidationService commonCodeValidationService;
     @Autowired private SwitchAddressResolver switchAddressResolver;
 
     @Async
@@ -152,9 +155,11 @@ public class ReqValAddService {
         processFromSwitchSync(isoBytes, pathTxnId);
     }
 
-    /** Reverse flow: Switch → IMPS → NPCI → IMPS → Switch. Returns Resp ISO. */
+    /** Reverse flow: Switch → IMPS → NPCI → IMPS → Switch. Returns Resp ISO. Duplicate txn_id rejected (409). */
     public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
+        if (!UNKNOWN_TXN.equals(txnId))
+            transactionService.validateNewTxnId(txnId);
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQVALADD_ISO_IN", isoBytes);
         try {
             org.jpos.iso.ISOMsg iso = new org.jpos.iso.ISOMsg();
@@ -172,22 +177,41 @@ public class ReqValAddService {
         }
         String reqXml = isoToXmlConverter.convertReqValAddToXml(isoBytes);
         auditService.saveRaw(txnId, "NPCI_REQVALADD_XML_OUT", reqXml);
+        try {
+            commonCodeValidationService.validateCommonHeadTxn(reqXml);
+        } catch (CommonCodeValidationException e) {
+            System.out.println("[IMPS] ReqValAdd from Switch – validation failed: " + e.getMessage());
+            String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
+            com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml, "VALADD");
+            String errResp = ackService.buildFailureRespValAdd(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
+            transactionService.markFailure(txnFail, errResp);
+            return ackService.buildFailureRespIso(isoBytes, errMsg);
+        }
+        TransactionEntity txn = transactionService.createRequest(txnId, reqXml, "VALADD");
+        transactionService.markIsoSent(txn);
         String respXml;
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqValAdd(reqXml, txnId) : npciMockClient.sendReqValAdd(reqXml);
         } catch (Exception e) {
             System.err.println("NPCI Mock not available: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
-        if (respXml == null || respXml.isBlank()) return null;
+        if (respXml == null || respXml.isBlank()) {
+            transactionService.markFailure(txn, null);
+            return null;
+        }
         auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_IN", respXml);
         try {
             org.jpos.iso.ISOMsg respIso = xmlToIsoConverter.convertRespValAdd(respXml);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPVALADD_ISO_OUT", respBytes);
+            String approvalNum = extractApprovalNum(respBytes);
+            transactionService.markSuccess(txn, respXml, approvalNum, null);
             return respBytes;
         } catch (Exception e) {
             System.err.println("IMPS: RespValAdd XML to ISO failed: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
     }

@@ -1,4 +1,4 @@
-package com.hitachi.imps.client;
+package com.hitachi.imps.client.switchclient;
 
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,8 +22,8 @@ public class RestSwitchClient implements ISwitchClient {
 
     @Autowired
     private SwitchAddressResolver switchAddressResolver;
-
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private RestTemplate restTemplate;
 
     private String buildDynamicUrl(String apiType, String txnId, String requestOrgId) {
         SwitchAddress addr = switchAddressResolver.resolve(requestOrgId);

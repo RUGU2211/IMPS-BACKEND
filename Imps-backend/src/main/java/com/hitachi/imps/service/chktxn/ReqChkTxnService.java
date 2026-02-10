@@ -5,8 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.ISwitchClient;
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.switchclient.ISwitchClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
@@ -21,6 +21,8 @@ import com.hitachi.imps.service.XmlParsingService;
 import com.hitachi.imps.service.iso.XmlUtil;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.validation.InstitutionValidationService;
+import com.hitachi.imps.service.validation.CommonCodeValidationService;
+import com.hitachi.imps.exception.CommonCodeValidationException;
 
 /** ReqChkTxn: NPCI (XML) and Switch (ISO). txn_id from path/XML only. Institution (IFSC) validation in IMPS only. */
 @Service
@@ -39,6 +41,7 @@ public class ReqChkTxnService {
     @Autowired(required = false) private INpciResponseSender npciResponseSender;
     @Autowired private AckService ackService;
     @Autowired private InstitutionValidationService institutionValidationService;
+    @Autowired private CommonCodeValidationService commonCodeValidationService;
     @Autowired private SwitchAddressResolver switchAddressResolver;
 
     @Async
@@ -130,9 +133,11 @@ public class ReqChkTxnService {
         processFromSwitchSync(isoBytes, pathTxnId);
     }
 
-    /** Reverse flow: Switch → IMPS → NPCI → IMPS → Switch. Returns Resp ISO. */
+    /** Reverse flow: Switch → IMPS → NPCI → IMPS → Switch. Returns Resp ISO. Duplicate txn_id rejected (409). */
     public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
+        if (!UNKNOWN_TXN.equals(txnId))
+            transactionService.validateNewTxnId(txnId);
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQCHKTXN_ISO_IN", isoBytes);
         try {
             org.jpos.iso.ISOMsg iso = new org.jpos.iso.ISOMsg();
@@ -150,22 +155,41 @@ public class ReqChkTxnService {
         }
         String reqXml = isoToXmlConverter.convertReqChkTxnToXml(isoBytes);
         auditService.saveRaw(txnId, "NPCI_REQCHKTXN_XML_OUT", reqXml);
+        try {
+            commonCodeValidationService.validateCommonHeadTxn(reqXml);
+        } catch (CommonCodeValidationException e) {
+            System.out.println("[IMPS] ReqChkTxn from Switch – validation failed: " + e.getMessage());
+            String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
+            com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml, "CHKTXN");
+            String errResp = ackService.buildFailureRespChkTxn(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
+            transactionService.markFailure(txnFail, errResp);
+            return ackService.buildFailureRespIso(isoBytes, errMsg);
+        }
+        TransactionEntity txn = transactionService.createRequest(txnId, reqXml, "CHKTXN");
+        transactionService.markIsoSent(txn);
         String respXml;
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqChkTxn(reqXml, txnId) : npciMockClient.sendReqChkTxn(reqXml);
         } catch (Exception e) {
             System.err.println("NPCI Mock not available: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
-        if (respXml == null || respXml.isBlank()) return null;
+        if (respXml == null || respXml.isBlank()) {
+            transactionService.markFailure(txn, null);
+            return null;
+        }
         auditService.saveRaw(txnId, "NPCI_RESPCHKTXN_XML_IN", respXml);
         try {
             ISOMsg respIso = xmlToIsoConverter.convertRespChkTxn(respXml);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPCHKTXN_ISO_OUT", respBytes);
+            String approvalNum = extractApprovalNum(respBytes);
+            transactionService.markSuccess(txn, respXml, approvalNum, null);
             return respBytes;
         } catch (Exception e) {
             System.err.println("IMPS: RespChkTxn XML to ISO failed: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
     }

@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.hitachi.imps.client.NpciSocketClient;
+import com.hitachi.imps.client.npci.NpciSocketClient;
 
 /**
  * Sends response to NPCI via outbound socket (Phase 3).

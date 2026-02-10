@@ -5,8 +5,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.ISwitchClient;
-import com.hitachi.imps.client.NpciMockClient;
+import com.hitachi.imps.client.switchclient.ISwitchClient;
+import com.hitachi.imps.client.npci.NpciMockClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
@@ -21,6 +21,7 @@ import com.hitachi.imps.service.XmlParsingService;
 import com.hitachi.imps.service.iso.XmlUtil;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.validation.InstitutionValidationService;
+import com.hitachi.imps.exception.ReqPayValidationException;
 
 /**
  * ReqPay: single service for both NPCI→IMPS (XML) and Switch→IMPS (ISO).
@@ -44,6 +45,7 @@ public class ReqPayService {
     @Autowired private AckService ackService;
     @Autowired private InstitutionValidationService institutionValidationService;
     @Autowired private SwitchAddressResolver switchAddressResolver;
+    @Autowired private ReqPayValidationService reqPayValidationService;
 
     // ----- NPCI → IMPS (XML): receive XML, convert to ISO, send to Switch -----
     @Async
@@ -164,21 +166,28 @@ public class ReqPayService {
 
     /**
      * Reverse flow: Switch sends Req ISO → IMPS converts to XML → sends to NPCI → gets Resp XML → converts to ISO.
-     * Returns Resp ISO to send back to Switch. Uses switch_ip/switch_port from institution_master for routing.
+     * Validates duplicate txn_id, IFSC; logs to transaction + message_audit_log; returns Resp ISO to Switch.
      */
     public byte[] processFromSwitchSync(byte[] isoBytes, String pathTxnId) {
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : UNKNOWN_TXN;
+        if (!UNKNOWN_TXN.equals(txnId))
+            transactionService.validateNewTxnId(txnId);
 
         auditService.saveRawBytesWithParsed(txnId, "SWITCH_REQPAY_ISO_IN", isoBytes);
+        ISOMsg iso;
         try {
-            ISOMsg iso = new ISOMsg();
+            iso = new ISOMsg();
             iso.setPackager(new com.hitachi.imps.iso.ImpsIsoPackager());
             iso.unpack(isoBytes);
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("IMPS: ReqPay from Switch – institution invalid: " + instErr);
-                return buildFailureRespPayIso(isoBytes, instErr);
+                System.out.println("[IMPS] ReqPay from Switch – institution invalid: " + instErr);
+                String reqXmlFail = isoToXmlConverter.convertReqPayToXml(isoBytes);
+                com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXmlFail);
+                String errResp = ackService.buildFailureRespPay(null, "MJ", instErr);
+                transactionService.markFailure(txnFail, errResp);
+                return ackService.buildFailureRespIso(isoBytes, instErr);
             }
         } catch (Exception e) {
             System.err.println("IMPS: ReqPay from Switch – could not validate IFSC: " + e.getMessage());
@@ -188,46 +197,50 @@ public class ReqPayService {
         String reqXml = isoToXmlConverter.convertReqPayToXml(isoBytes);
         auditService.saveRaw(txnId, "NPCI_REQPAY_XML_OUT", reqXml);
 
+        try {
+            reqPayValidationService.validate(reqXml);
+        } catch (ReqPayValidationException e) {
+            System.out.println("[IMPS] ReqPay from Switch – validation failed: " + e.getMessage());
+            String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
+            com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml);
+            String errResp = ackService.buildFailureRespPay(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
+            transactionService.markFailure(txnFail, errResp);
+            return ackService.buildFailureRespIso(isoBytes, errMsg);
+        }
+
+        com.hitachi.imps.entity.TransactionEntity txn = transactionService.createRequest(txnId, reqXml);
+        if (iso.hasField(11)) txn.setDe11(iso.getString(11));
+        if (iso.hasField(37)) txn.setDe37(iso.getString(37));
+        if (iso.hasField(12)) txn.setDe12(iso.getString(12));
+        if (iso.hasField(13)) txn.setDe13(iso.getString(13));
+        transactionService.markIsoSent(txn);
+
         String respXml;
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqPay(reqXml, txnId) : npciMockClient.sendReqPay(reqXml);
         } catch (Exception e) {
             System.err.println("NPCI Mock Client not available: " + e.getMessage());
+            transactionService.markFailure(txn, null);
             return null;
         }
-        if (respXml == null || respXml.isBlank()) return null;
+        if (respXml == null || respXml.isBlank()) {
+            transactionService.markFailure(txn, null);
+            return null;
+        }
 
         auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_IN", respXml);
         try {
             ISOMsg respIso = xmlToIsoConverter.convertRespPay(respXml);
+            String approvalNum = respIso.hasField(38) ? respIso.getString(38) : null;
+            transactionService.markSuccess(txn, respXml, approvalNum, null);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPPAY_ISO_OUT", respBytes);
             return respBytes;
         } catch (Exception e) {
             System.err.println("IMPS: RespPay XML to ISO failed: " + e.getMessage());
+            transactionService.markFailure(txn, respXml);
             return null;
         }
     }
 
-    private byte[] buildFailureRespPayIso(byte[] reqIsoBytes, String errMsg) {
-        try {
-            ISOMsg req = IsoUtil.unpack(reqIsoBytes, new ImpsIsoPackager());
-            ISOMsg resp = new ISOMsg();
-            resp.setPackager(new ImpsIsoPackager());
-            resp.setMTI("0210");
-            if (req.hasField(3)) resp.set(3, req.getString(3));
-            if (req.hasField(4)) resp.set(4, req.getString(4));
-            if (req.hasField(37)) resp.set(37, req.getString(37));
-            if (req.hasField(41)) resp.set(41, req.getString(41));
-            if (req.hasField(120)) resp.set(120, req.getString(120));
-            resp.set(11, req.hasField(11) ? req.getString(11) : String.format("%06d", System.currentTimeMillis() % 1_000_000));
-            resp.set(12, java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss")));
-            resp.set(13, java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("MMdd")));
-            resp.set(38, "000000");
-            resp.set(39, "96");
-            return IsoUtil.pack(resp);
-        } catch (Exception e) {
-            return null;
-        }
-    }
 }
