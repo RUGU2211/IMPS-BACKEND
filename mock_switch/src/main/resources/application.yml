@@ -1,24 +1,45 @@
 # ===========================================
-# MOCK SWITCH – Application configuration
+# MOCK SWITCH – Application Configuration
+# ===========================================
+# HTTP (default): server.port 8082
+# HTTPS: run with --spring.profiles.active=ssl → server.port 8082 (HTTPS)
+#
+# CONNECTION FLOW EXPLANATION:
+# ===========================================
+# FLOW 1: IMPS → Switch → IMPS (Request-Response Flow)
+# -----------------------------------------------------
+# Connection 1: IMPS opens connection to Switch (socket) → sends Req → Switch sends Resp → IMPS closes connection
+# Connection 2: Switch opens connection to IMPS (socket) → sends Resp → IMPS sends ACK → Switch closes connection
+#
+# FLOW 2: Switch → IMPS → Switch (Reverse Flow)
+# -----------------------------------------------------
+# Connection 1: Switch opens connection to IMPS (socket) → sends Req → IMPS sends Resp → Switch closes connection
+# Connection 2: IMPS opens connection to Switch (socket) → sends Resp → Switch sends ACK → IMPS closes connection
+#
+# IMPORTANT: Each connection is opened, used, and closed immediately after use.
+# Connections are NOT reused - new connection is opened for each message exchange.
 # ===========================================
 
+# ===========================================
+# SERVER CONFIGURATION
+# ===========================================
+# Values are read from environment (set from .env; see docs/sample-env).
+# ===========================================
 server:
-  port: 8082
+  port: ${SERVER_PORT:8082}
 
-# Hibernate SQL logging (reverse flow: account_master lookups for ValAdd/Pay etc.)
-logging:
-  level:
-    org.hibernate.SQL: DEBUG
-
+# ===========================================
+# DATABASE CONFIGURATION
+# ===========================================
 spring:
   application:
     name: mock-switch
   datasource:
-    url: jdbc:postgresql://localhost:5432/switch_db
-    username: postgres
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/switch_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
     hikari:
-      housekeeping-run-interval: 10000  # 10s (avoids thread starvation / clock leap when machine sleeps)
+      housekeeping-run-interval: 10000  # 10s (avoids thread starvation when machine sleeps)
 
   jpa:
     hibernate:
@@ -31,46 +52,60 @@ spring:
         format_sql: true
 
 # ===========================================
-# IMPS BACKEND ROUTING (for sending responses back to IMPS)
+# LOGGING CONFIGURATION
 # ===========================================
-# Endpoint path is built dynamically: base-path / resptype / txnId
-# e.g. base-path: /imps → /imps/resppay/{txnId}, /imps/respchktxn/{txnId}, etc.
-imps:
-  imps_ip: 192.168.1.38
-  imps_port: 8081
-  base-path: /imps
+logging:
+  level:
+    org.hibernate.SQL: DEBUG  # Log SQL queries for account_master operations
 
 # ===========================================
-# SOCKET SERVER (TCP – length-prefixed ISO)
-# IMPS connects; Switch receives [4-byte length][ISO], responds [4-byte length][ISO] on same connection.
+# IMPS BACKEND ROUTING CONFIGURATION
+# ===========================================
+# When Switch needs to send responses back to IMPS Backend
+# Endpoint path is built dynamically: base-path / resptype / txnId
+# Examples:
+#   - base-path: /imps → /imps/resppay/{txnId}
+#   - base-path: /imps → /imps/respchktxn/{txnId}
+#   - base-path: /imps → /imps/respvaladd/{txnId}
+# ===========================================
+imps:
+  imps_ip: ${IMPS_IMPS_IP:192.168.1.38}
+  imps_port: ${IMPS_IMPS_PORT:8081}
+  base-path: ${IMPS_BASE_PATH:/imps}
+
+# ===========================================
+# SOCKET SERVER CONFIGURATION
+# ===========================================
+# Switch listens for incoming socket connections from IMPS
+# Protocol: [4-byte length big-endian][ISO 8583 message]
+# Response: [4-byte length][ISO 8583 response] on same connection
 # ===========================================
 socket:
-  # true = start TCP socket server; false = only REST on server.port
-  enabled: true
-  # true = listen on ssl-port with TLS; false = plain TCP on port only
-  ssl-enabled: true
+  enabled: true            # true = start TCP socket server; false = only REST
+  ssl-enabled: true        # true = listen on ssl-port with TLS; false = plain TCP on port
   server:
-    bind-host: 0.0.0.0
-    port: 9084        # used when ssl-enabled: false
-    ssl-port: 9444    # used when ssl-enabled: true
+    bind-host: 0.0.0.0     # Listen on all interfaces
+    port: 9084             # TCP port (used when ssl-enabled: false)
+    ssl-port: 9444         # SSL/TLS port (used when ssl-enabled: true)
   ssl:
-    key-store: file:../certs/switch-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SOCKET_SSL_KEY_STORE:file:../certs/switch-keystore.jks}
+    key-store-password: ${SOCKET_SSL_KEY_STORE_PASSWORD:IMPS-Backend}
 
 # ===========================================
-# MOCK BEHAVIOUR
+# MOCK BEHAVIOUR CONFIGURATION
 # ===========================================
 mock:
-  # true = send response automatically after receiving request; false = wait for manual trigger
   auto-respond: true
-  response-delay-ms: 500
-  default-result: SUCCESS
+  response-delay-ms: ${MOCK_RESPONSE_DELAY_MS:500}
+  default-result: ${MOCK_DEFAULT_RESULT:SUCCESS}
 
 # ===========================================
-# PROFILE: ssl – REST over HTTPS
+# PROFILE: ssl – REST over HTTPS (Optional)
 # ===========================================
 # Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-# HTTPS REST on port 8082. IMPS POST to https://localhost:8082/imps/{resptype}/{txnId}
+# HTTPS REST on port 8082
+# IMPS POST to https://localhost:8082/imps/{resptype}/{txnId}
+# ===========================================
 ---
 spring:
   config:
@@ -80,7 +115,7 @@ server:
   port: 8082
   ssl:
     enabled: true
-    key-store: file:../certs/switch-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SOCKET_SSL_KEY_STORE:file:../certs/switch-keystore.jks}
+    key-store-password: ${SOCKET_SSL_KEY_STORE_PASSWORD:IMPS-Backend}
     key-store-type: JKS
     key-alias: switch

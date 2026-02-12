@@ -106,16 +106,21 @@ public class SwitchSocketServer {
     @jakarta.annotation.PreDestroy
     public void stop() {
         if (serverSocket != null) {
-            try { serverSocket.close(); } catch (IOException ignored) {}
+            try { serverSocket.close(); } catch (IOException e) { log.debug("ServerSocket close: {}", e.getMessage()); }
         }
         acceptor.shutdownNow();
         handlers.shutdownNow();
-        try { handlers.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+        try { handlers.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException e) { log.debug("Await termination interrupted: {}", e.getMessage()); Thread.currentThread().interrupt(); }
     }
 
     private void handleConnection(Socket socket) {
         String clientAddr = socket.getRemoteSocketAddress().toString();
-        log.info("Switch socket connected: {}", clientAddr);
+        String protocol = socket instanceof SSLSocket ? "SSL/TLS" : "TCP";
+        log.info("[IMPS] Switch socket connected: {} ({})", clientAddr, protocol);
+        System.out.println("==========================================");
+        System.out.println("[IMPS] INCOMING CONNECTION FROM SWITCH");
+        System.out.println("Protocol: " + protocol + " | Address: " + clientAddr);
+        System.out.println("==========================================");
         try (DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
             int maxSize = socketConfig.getMaxXmlSize();
@@ -127,9 +132,14 @@ public class SwitchSocketServer {
                 }
                 byte[] isoBytes = new byte[length];
                 in.readFully(isoBytes);
-                System.out.println("[IMPS] ISO received from Switch (socket): length=" + length);
                 String msgType = detectMessageType(isoBytes);
                 String txnId = extractTxnId(isoBytes);
+                String isoDisplay = formatIsoForConsole(isoBytes);
+                System.out.println("==========================================");
+                System.out.println("[IMPS] REQUEST FROM SWITCH (SOCKET)");
+                System.out.println("Message Type: " + msgType + " | TxnId: " + txnId + " | Length: " + length + " bytes");
+                System.out.println("==========================================");
+                System.out.println(isoDisplay);
                 byte[] respIso;
                 try {
                     switch (msgType) {
@@ -155,20 +165,34 @@ public class SwitchSocketServer {
                         respIso = ackService.buildIsoAckFromResponse(isoBytes);
                     }
                 } catch (Exception e) {
-                    log.error("Switch socket process error txnId={} msgType={}", txnId, msgType, e);
+                    log.error("[IMPS] Switch socket process error txnId={} msgType={}", txnId, msgType, e);
                     respIso = ackService.buildIsoAckFromResponse(isoBytes);
                     if (respIso == null) respIso = new byte[0];
+                }
+                if (respIso != null && respIso.length > 0) {
+                    String respDisplay = formatIsoForConsole(respIso);
+                    String respMsgType = detectMessageType(respIso);
+                    System.out.println("==========================================");
+                    System.out.println("[IMPS] RESPONSE TO SWITCH (SOCKET)");
+                    System.out.println("Message Type: " + respMsgType + " | TxnId: " + txnId + " | Length: " + respIso.length + " bytes");
+                    System.out.println("==========================================");
+                    System.out.println(respDisplay);
                 }
                 out.writeInt(respIso.length);
                 out.write(respIso);
                 out.flush();
             }
         } catch (IOException e) {
-            log.debug("Switch socket closed: {}", clientAddr);
+            log.debug("[IMPS] Switch socket closed: {}", clientAddr);
+            System.out.println("[IMPS] Connection closed by Switch: " + clientAddr + " (" + e.getMessage() + ")");
         } catch (Exception e) {
-            log.error("Switch socket error: {}", clientAddr, e);
+            log.error("[IMPS] Switch socket error: {}", clientAddr, e);
         } finally {
-            try { socket.close(); } catch (IOException ignored) {}
+            try {
+                socket.close();
+            } catch (IOException e) {
+                log.debug("[IMPS] Error closing socket: {}", e.getMessage());
+            }
         }
     }
 
@@ -204,6 +228,22 @@ public class SwitchSocketServer {
             return combined.length() >= 35 ? combined.substring(0, 35) : String.format("%-35s", combined).replace(' ', '0');
         } catch (Exception e) {
             return "SWI" + System.currentTimeMillis();
+        }
+    }
+
+    private String formatIsoForConsole(byte[] isoBytes) {
+        try {
+            ISOMsg iso = IsoUtil.unpack(isoBytes, new ImpsIsoPackager());
+            StringBuilder sb = new StringBuilder();
+            sb.append("MTI=").append(iso.getMTI()).append("\n");
+            for (int i = 1; i <= 128; i++) {
+                if (iso.hasField(i)) {
+                    sb.append("DE").append(i).append("=").append(iso.getString(i)).append("\n");
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "ISO parse failed: " + e.getMessage();
         }
     }
 }

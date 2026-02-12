@@ -65,7 +65,13 @@ public class MockSwitchController {
     @PostMapping(value = "/resppay/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String handleRespPay(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPPAY");
-        System.out.println("[MOCK_SWITCH] RESPPAY received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
+        String isoDisplay = responseService.formatIsoForConsole(isoBytes);
+        System.out.println("==========================================");
+        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("Message Type: RespPay | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
+        System.out.println("==========================================");
+        System.out.println(isoDisplay);
+        System.out.println("[MOCK_SWITCH] Forwarding RespPay to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPPAY");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resppay", txnId), "RESPPAY");
         return buildAck("RespPay");
@@ -74,7 +80,13 @@ public class MockSwitchController {
     @PostMapping(value = "/respchktxn/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String handleRespChkTxn(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPCHKTXN");
-        System.out.println("[MOCK_SWITCH] RESPCHKTXN received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
+        String isoDisplay = responseService.formatIsoForConsole(isoBytes);
+        System.out.println("==========================================");
+        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("Message Type: RespChkTxn | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
+        System.out.println("==========================================");
+        System.out.println(isoDisplay);
+        System.out.println("[MOCK_SWITCH] Forwarding RespChkTxn to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPCHKTXN");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respchktxn", txnId), "RESPCHKTXN");
         return buildAck("RespChkTxn");
@@ -85,7 +97,13 @@ public class MockSwitchController {
     @PostMapping(value = "/respvaladd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String handleRespValAdd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPVALADD");
-        System.out.println("[MOCK_SWITCH] RESPVALADD received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
+        String isoDisplay = responseService.formatIsoForConsole(isoBytes);
+        System.out.println("==========================================");
+        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("Message Type: RespValAdd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
+        System.out.println("==========================================");
+        System.out.println(isoDisplay);
+        System.out.println("[MOCK_SWITCH] Forwarding RespValAdd to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPVALADD");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respvaladd", txnId), "RESPVALADD");
         return buildAck("RespValAdd");
@@ -94,7 +112,13 @@ public class MockSwitchController {
     @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = { MediaType.APPLICATION_OCTET_STREAM_VALUE, MediaType.APPLICATION_XML_VALUE }, produces = MediaType.APPLICATION_XML_VALUE)
     public String handleRespListAccPvd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPLISTACCPVD");
-        System.out.println("[MOCK_SWITCH] RESPLISTACCPVD received from IMPS txnId=" + txnId + " | forwarding to IMPS Backend");
+        String isoDisplay = responseService.formatIsoForConsole(isoBytes);
+        System.out.println("==========================================");
+        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("Message Type: RespListAccPvd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
+        System.out.println("==========================================");
+        System.out.println(isoDisplay);
+        System.out.println("[MOCK_SWITCH] Forwarding RespListAccPvd to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPLISTACCPVD");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resplistaccpvd", txnId), "RESPLISTACCPVD");
         return buildAck("RespListAccPvd");

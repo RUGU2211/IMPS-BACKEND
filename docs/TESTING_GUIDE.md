@@ -19,20 +19,40 @@ Remove-Item certs\*.jks, certs\*.cer -ErrorAction SilentlyContinue
 .\certs\generate-certs.bat
 ```
 
-### Start all services
+### .env and run commands
+
+Each app has a **`.env`** in its directory. Load it before starting so **application.yml** uses those values. See **[docs/sample-env](sample-env)** for variable names.
+
+**Linux / Mac (Bash):**
+
+```bash
+# Terminal 1 – IMPS Backend
+cd Imps-backend
+set -a && source .env && set +a && mvn spring-boot:run
+
+# Terminal 2 – mock_switch
+cd mock_switch
+set -a && source .env && set +a && mvn spring-boot:run
+
+# Terminal 3 – mock_npci
+cd mock_npci
+set -a && source .env && set +a && mvn spring-boot:run
+```
+
+**Windows (PowerShell):**
 
 ```powershell
 # Terminal 1 – IMPS Backend
 cd Imps-backend
-mvn spring-boot:run
+Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
 
 # Terminal 2 – mock_switch
 cd mock_switch
-mvn spring-boot:run
+Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
 
 # Terminal 3 – mock_npci
 cd mock_npci
-mvn spring-boot:run
+Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
 ```
 
 **HTTPS (SSL profile)** – use the same command with `-Dspring-boot.run.profiles=ssl` for each app so tests can use HTTPS and fixed ports:
@@ -43,15 +63,17 @@ mvn spring-boot:run
 | mock_switch| 8082           | **8082**             |
 | mock_npci  | 8083           | **8445**             |
 
+```bash
+# Linux/Mac – load .env then run with ssl profile
+cd Imps-backend && set -a && source .env && set +a && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+cd mock_switch && set -a && source .env && set +a && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+cd mock_npci && set -a && source .env && set +a && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+```
+
 ```powershell
-# Terminal 1 – IMPS (HTTPS 8443)
-cd Imps-backend && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-
-# Terminal 2 – mock_switch (HTTPS 8082)
-cd mock_switch && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-
-# Terminal 3 – mock_npci (HTTPS 8445)
-cd mock_npci && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+# Windows PowerShell – load .env then run with ssl profile
+cd Imps-backend; Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+# (Repeat for mock_switch and mock_npci in separate terminals.)
 ```
 
 When IMPS runs with `ssl`, it calls Switch at `https://localhost:8082` and NPCI mock at `https://localhost:8445` (self-signed certs are trusted for dev).
@@ -64,18 +86,19 @@ The **Switch** sends requests **to** IMPS (reverse flow). You can verify the con
 
 ### Prerequisites
 
-1. **IMPS Backend must be running.**
-   - HTTP only: `cd Imps-backend && mvn spring-boot:run` → IMPS listens on **8081**.
-   - HTTPS (for Postman with 8443): `mvn spring-boot:run -Dspring-boot.run.profiles=ssl` → IMPS listens on **8443**.
+1. **IMPS Backend must be running.** (Load `.env` first so application.yml uses it.)
+   - HTTP only: `cd Imps-backend && set -a && source .env && set +a && mvn spring-boot:run` → IMPS listens on **8081**.
+   - HTTPS (for Postman with 8443): same with `-Dspring-boot.run.profiles=ssl` → IMPS listens on **8443**.
 2. Optional: **mock_switch** running if you want IMPS to forward to a switch (8082/8444).
 
 ### Option A: Check via Postman (REST / HTTPS)
 
-1. Start IMPS with the **ssl** profile so it listens on **8443**:
-   ```powershell
-   cd E:\Hitachi_Project\Imps-backend
-   mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+1. Start IMPS with the **ssl** profile so it listens on **8443** (load `.env` first):
+   ```bash
+   cd Imps-backend
+   set -a && source .env && set +a && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
    ```
+   Windows PowerShell: `Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run -Dspring-boot.run.profiles=ssl`
 2. In Postman, open the collection **IMPS API Collection (Dynamic)** → folder **Switch - IMPS flow**.
 3. Pick a request (e.g. **ReqPay (ISO) - Switch to IMPS**).
 4. Set **Body** → **Binary** → **Select file** → choose `postman/samples/iso_reqpay.bin` (or set the path in the request; path is relative to the collection folder).
@@ -85,7 +108,7 @@ The **Switch** sends requests **to** IMPS (reverse flow). You can verify the con
 **Success:** Status **200** and response body is **binary ISO** (or XML if IMPS returns an error in XML).  
 **Connection failure:** Connection refused / ECONNREFUSED → IMPS not running or wrong host/port.  
 **Unpack error (e.g. DE-32):** Body was not sent as binary → use **Body → Binary → file** only.  
-**"NPCI MOCK SEND FAILED … Connection refused":** IMPS forwards ReqPay (and other requests) to the **NPCI mock** on port **8083**. Start **mock_npci** so the full flow works: `cd mock_npci && mvn spring-boot:run`.
+**"NPCI MOCK SEND FAILED … Connection refused":** IMPS forwards ReqPay (and other requests) to the **NPCI mock** on port **8083**. Start **mock_npci** so the full flow works: `cd mock_npci && set -a && source .env && set +a && mvn spring-boot:run`.
 
 ### Option B: Check via Socket (TCP or TLS)
 
@@ -110,7 +133,7 @@ Sample ISO binaries for socket testing: use the same files under `postman/sample
 
 | Step | Action |
 |------|--------|
-| 1 | IMPS running (`mvn spring-boot:run` or with `ssl` profile for 8443). |
+| 1 | IMPS running (load `.env` then `mvn spring-boot:run`, or with `ssl` profile for 8443). |
 | 2 | For REST: Postman → **Switch - IMPS flow** → Body **Binary** → select `postman/samples/iso_reqpay.bin` → Send to `https://&lt;host&gt;:8443/imps/reqpay/{{txnId}}`. |
 | 3 | For socket: Connect to **&lt;host&gt;:9086** (TCP) or **&lt;host&gt;:9446** (TLS), send [4 bytes][ISO], read [4 bytes][ISO]. |
 | 4 | Check IMPS console for logs: `[IMPS] ReqPay ISO received from Switch txnId=...` and no unpack error. |
@@ -244,12 +267,14 @@ openssl s_client -connect localhost:9443
 
 ## 6. HTTP over HTTPS (REST + TLS)
 
-For HTTPS on IMPS (port **8443**):
+For HTTPS on IMPS (port **8443**), load `.env` then run:
 
-```powershell
+```bash
 cd Imps-backend
-mvn spring-boot:run -Dspring-boot.run.profiles=ssl
+set -a && source .env && set +a && mvn spring-boot:run -Dspring-boot.run.profiles=ssl
 ```
+
+Windows PowerShell: `Get-Content .env | ForEach-Object { ... }; mvn spring-boot:run -Dspring-boot.run.profiles=ssl` (see "Start all services" above for full one-liner).
 
 Then:
 

@@ -68,37 +68,62 @@ public class ImpsController {
     // ---------- NPCI → IMPS (XML) ----------
     @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqpay(@PathVariable String txnId, @RequestBody String xml) throws ReqPayValidationException {
-        System.out.println("[IMPS] ReqPay received from NPCI (REST):");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("Message Type: ReqPay | TxnId: " + txnId + " | Format: XML");
+        System.out.println("==========================================");
         System.out.println(xml);
-        return impsInboundService.handleReqPay(xml, txnId, restAckSender());
+        String response = impsInboundService.handleReqPay(xml, txnId, restAckSender());
+        System.out.println("[IMPS] ACK sent to NPCI for ReqPay txnId=" + txnId);
+        return response;
     }
 
     @PostMapping(value = "/reqchktxn/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqchktxn(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
-        System.out.println("[IMPS] ReqChkTxn received from NPCI (REST):");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("Message Type: ReqChkTxn | TxnId: " + txnId + " | Format: XML");
+        System.out.println("==========================================");
         System.out.println(xml);
-        return impsInboundService.handleReqChkTxn(xml, txnId, restAckSender());
+        String response = impsInboundService.handleReqChkTxn(xml, txnId, restAckSender());
+        System.out.println("[IMPS] ACK sent to NPCI for ReqChkTxn txnId=" + txnId);
+        return response;
     }
 
     @PostMapping(value = "/reqhbt/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqhbt(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
-        System.out.println("[IMPS] ReqHbt received from NPCI (REST):");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("Message Type: ReqHbt | TxnId: " + txnId + " | Format: XML");
+        System.out.println("==========================================");
         System.out.println(xml);
-        return impsInboundService.handleReqHbt(xml, txnId, restAckSender());
+        String response = impsInboundService.handleReqHbt(xml, txnId, restAckSender());
+        System.out.println("[IMPS] ACK sent to NPCI for ReqHbt txnId=" + txnId);
+        return response;
     }
 
     @PostMapping(value = "/reqlistaccpvd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqlistaccpvd(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
-        System.out.println("[IMPS] ReqListAccPvd received from NPCI (REST):");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("Message Type: ReqListAccPvd | TxnId: " + txnId + " | Format: XML");
+        System.out.println("==========================================");
         System.out.println(xml);
-        return impsInboundService.handleReqListAccPvd(xml, txnId, restAckSender());
+        String response = impsInboundService.handleReqListAccPvd(xml, txnId, restAckSender());
+        System.out.println("[IMPS] ACK sent to NPCI for ReqListAccPvd txnId=" + txnId);
+        return response;
     }
 
     @PostMapping(value = "/reqvaladd/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String reqvaladd(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
-        System.out.println("[IMPS] ReqValAdd received from NPCI (REST):");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("Message Type: ReqValAdd | TxnId: " + txnId + " | Format: XML");
+        System.out.println("==========================================");
         System.out.println(xml);
-        return impsInboundService.handleReqValAdd(xml, txnId, restAckSender());
+        String response = impsInboundService.handleReqValAdd(xml, txnId, restAckSender());
+        System.out.println("[IMPS] ACK sent to NPCI for ReqValAdd txnId=" + txnId);
+        return response;
     }
 
     // ---------- Switch → IMPS (ISO, Req*): reverse flow – Switch sends Req ISO, IMPS forwards to NPCI, returns Resp ISO -----
@@ -108,11 +133,17 @@ public class ImpsController {
     public ResponseEntity<byte[]> reqpayIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
-        System.out.println("[IMPS] ReqPay ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM SWITCH (HTTP)");
+        System.out.println("Message Type: ReqPay | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqPayService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
-            System.out.println("[IMPS] RespPay ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE TO SWITCH (HTTP)");
+            System.out.println("Message Type: RespPay | TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
+            System.out.println("==========================================");
             System.out.println(formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -122,11 +153,17 @@ public class ImpsController {
     public ResponseEntity<byte[]> reqchktxnIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
-        System.out.println("[IMPS] ReqChkTxn ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM SWITCH (HTTP)");
+        System.out.println("Message Type: ReqChkTxn | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqChkTxnService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
-            System.out.println("[IMPS] RespChkTxn ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE TO SWITCH (HTTP)");
+            System.out.println("Message Type: RespChkTxn | TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
+            System.out.println("==========================================");
             System.out.println(formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -136,11 +173,17 @@ public class ImpsController {
     public ResponseEntity<byte[]> reqhbtIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
-        System.out.println("[IMPS] ReqHbt ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM SWITCH (HTTP)");
+        System.out.println("Message Type: ReqHbt | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqHbtService.processFromSwitch(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
-            System.out.println("[IMPS] RespHbt ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE TO SWITCH (HTTP)");
+            System.out.println("Message Type: RespHbt | TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
+            System.out.println("==========================================");
             System.out.println(formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(respIso != null ? respIso : new byte[0]);
@@ -150,11 +193,17 @@ public class ImpsController {
     public ResponseEntity<byte[]> reqlistaccpvdIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
-        System.out.println("[IMPS] ReqListAccPvd ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM SWITCH (HTTP)");
+        System.out.println("Message Type: ReqListAccPvd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqListAccPvdService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
-            System.out.println("[IMPS] RespListAccPvd ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE TO SWITCH (HTTP)");
+            System.out.println("Message Type: RespListAccPvd | TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
+            System.out.println("==========================================");
             System.out.println(formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -164,11 +213,17 @@ public class ImpsController {
     public ResponseEntity<byte[]> reqvaladdIso(@PathVariable String txnId, @RequestBody(required = false) byte[] isoBytes) {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
-        System.out.println("[IMPS] ReqValAdd ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] REQUEST FROM SWITCH (HTTP)");
+        System.out.println("Message Type: ReqValAdd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
         byte[] respIso = reqValAddService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
-            System.out.println("[IMPS] RespValAdd ISO sent to Switch txnId=" + txnId + ":");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE TO SWITCH (HTTP)");
+            System.out.println("Message Type: RespValAdd | TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
+            System.out.println("==========================================");
             System.out.println(formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -183,37 +238,57 @@ public class ImpsController {
     // ---------- Switch → IMPS (ISO, Resp*): receive ISO response from Switch, process it, return ISO ACK ----------
     @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] resppay(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
-        System.out.println("[IMPS] RespPay ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] RESPONSE FROM SWITCH (HTTP)");
+        System.out.println("Message Type: RespPay | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
+        System.out.println("[IMPS] Processing RespPay - will update transaction and send to NPCI");
         respPayService.processAsync(isoBytes, txnId);
         byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        System.out.println("[IMPS] ISO ACK sent to Switch for RespPay txnId=" + txnId);
         return isoAck != null ? isoAck : new byte[0];
     }
 
     @PostMapping(value = "/respchktxn/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] respchktxn(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
-        System.out.println("[IMPS] RespChkTxn ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] RESPONSE FROM SWITCH (HTTP)");
+        System.out.println("Message Type: RespChkTxn | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
+        System.out.println("[IMPS] Processing RespChkTxn - will update transaction and send to NPCI");
         respChkTxnService.processAsync(isoBytes, txnId);
         byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        System.out.println("[IMPS] ISO ACK sent to Switch for RespChkTxn txnId=" + txnId);
         return isoAck != null ? isoAck : new byte[0];
     }
 
     @PostMapping(value = "/resplistaccpvd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] resplistaccpvd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
-        System.out.println("[IMPS] RespListAccPvd ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] RESPONSE FROM SWITCH (HTTP)");
+        System.out.println("Message Type: RespListAccPvd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
+        System.out.println("[IMPS] Processing RespListAccPvd - will update transaction and send to NPCI");
         respListAccPvdService.processAsync(isoBytes, txnId);
         byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        System.out.println("[IMPS] ISO ACK sent to Switch for RespListAccPvd txnId=" + txnId);
         return isoAck != null ? isoAck : new byte[0];
     }
 
     @PostMapping(value = "/respvaladd/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] respvaladd(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
-        System.out.println("[IMPS] RespValAdd ISO received from Switch txnId=" + txnId + ":");
+        System.out.println("==========================================");
+        System.out.println("[IMPS] RESPONSE FROM SWITCH (HTTP)");
+        System.out.println("Message Type: RespValAdd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
+        System.out.println("==========================================");
         System.out.println(formatIsoForConsole(isoBytes));
+        System.out.println("[IMPS] Processing RespValAdd - will update transaction and send to NPCI");
         respValAddService.processAsync(isoBytes, txnId);
         byte[] isoAck = ackService.buildIsoAckFromResponse(isoBytes);
+        System.out.println("[IMPS] ISO ACK sent to Switch for RespValAdd txnId=" + txnId);
         return isoAck != null ? isoAck : new byte[0];
     }
 

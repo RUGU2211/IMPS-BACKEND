@@ -91,6 +91,15 @@ NPCI (mock 8083)  ←→  Imps-backend (8081)  ←→  Mock Switch (8082)
 - **mock_switch** calls **Imps-backend** at `http://localhost:8081` for async responses (REST mode).
 - **IMPS** TCP pings each bank switch every 3 min; console shows UP/DOWN banks with contact details. No auto ReqHbt from NPCI or Switch. Manual ReqHbt (socket, HTTP, SSL) triggers full flow with DB logging.
 
+## Run with .env
+
+Each app reads config from the environment. Put a **`.env`** in `Imps-backend/`, `mock_switch/`, or `mock_npci/` (see **[docs/sample-env](sample-env)**) and load it before starting:
+
+- **Linux/Mac:** `cd <app-dir> && set -a && source .env && set +a && mvn spring-boot:run`
+- **Windows PowerShell:** `cd <app-dir>; Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run`
+
+Add `-Dspring-boot.run.profiles=ssl` for HTTPS/TLS ports. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for full run commands.
+
 ## Config summary
 
 - **Imps-backend** `application.yml`: `socket.*`, `npci.compliant-flow`, `npci.socket.*` (host, port), `routing.switch.socket.*`, `routing.switch.rest.*`, `imps.*`

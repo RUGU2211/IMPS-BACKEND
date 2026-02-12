@@ -117,16 +117,21 @@ public class NpciSocketServer {
     @jakarta.annotation.PreDestroy
     public void stop() {
         if (serverSocket != null) {
-            try { serverSocket.close(); } catch (IOException ignored) {}
+            try { serverSocket.close(); } catch (IOException e) { log.debug("ServerSocket close: {}", e.getMessage()); }
         }
         acceptor.shutdownNow();
         handlers.shutdownNow();
-        try { handlers.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+        try { handlers.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException e) { log.debug("Await termination interrupted: {}", e.getMessage()); Thread.currentThread().interrupt(); }
     }
 
     private void handleConnection(Socket socket) {
         String clientAddr = socket.getRemoteSocketAddress().toString();
-        log.info("NPCI socket connected: {}", clientAddr);
+        String protocol = socket instanceof SSLSocket ? "SSL/TLS" : "TCP";
+        log.info("[IMPS] NPCI socket connected: {} ({})", clientAddr, protocol);
+        System.out.println("==========================================");
+        System.out.println("[IMPS] INCOMING CONNECTION FROM NPCI");
+        System.out.println("Protocol: " + protocol + " | Address: " + clientAddr);
+        System.out.println("==========================================");
         try (DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
             int maxSize = socketConfig.getMaxXmlSize();
@@ -194,11 +199,16 @@ public class NpciSocketServer {
                 out.flush();
             }
         } catch (IOException e) {
-            log.debug("NPCI socket closed: {}", clientAddr);
+            log.debug("[IMPS] NPCI socket closed: {}", clientAddr);
+            System.out.println("[IMPS] Connection closed by NPCI: " + clientAddr + " (" + e.getMessage() + ")");
         } catch (Exception e) {
-            log.error("NPCI socket error: {}", clientAddr, e);
+            log.error("[IMPS] NPCI socket error: {}", clientAddr, e);
         } finally {
-            try { socket.close(); } catch (IOException ignored) {}
+            try {
+                socket.close();
+            } catch (IOException e) {
+                log.debug("[IMPS] Error closing socket: {}", e.getMessage());
+            }
         }
     }
 

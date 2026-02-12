@@ -85,8 +85,8 @@ Use the Postman collection to test IMPS over **HTTP**, **HTTPS**, and to simulat
 
 ## Testing HTTP vs HTTPS
 
-1. **HTTP (default):** Ensure `impsBaseUrl` = `http://localhost:8081`. Run IMPS without profile. Use folders 1–4 with `{{impsBaseUrl}}`.
-2. **HTTPS:** Start IMPS with `--spring.profiles.active=ssl` (port 8443). Set request URL to `{{impsBaseUrlHttps}}` or duplicate a request and change the host to `https://localhost:8443`. In Postman → Settings → turn off “SSL certificate verification” for local testing.
+1. **HTTP (default):** Ensure `impsBaseUrl` = `http://localhost:8081`. Run IMPS with `.env` loaded then `mvn spring-boot:run` (no profile). See [sample-env](sample-env) and [TESTING_GUIDE.md](TESTING_GUIDE.md) for full run commands. Use folders 1–4 with `{{impsBaseUrl}}`.
+2. **HTTPS:** Start IMPS with `.env` loaded and `-Dspring-boot.run.profiles=ssl` (port 8443). Set request URL to `{{impsBaseUrlHttps}}` or duplicate a request and change the host to `https://localhost:8443`. In Postman → Settings → turn off “SSL certificate verification” for local testing.
 
 ---
 

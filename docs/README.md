@@ -4,9 +4,10 @@
 
 | Document | Purpose |
 |----------|---------|
-| [PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.md) | Ports (HTTP/HTTPS/TCP/TLS), databases, config, socket/HTTP flow |
+| [PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.md) | Ports (HTTP/HTTPS/TCP/TLS), databases, config, socket/HTTP flow, run with .env |
+| [sample-env](sample-env) | Sample `.env` variables and **run commands** (Linux/Mac: `set -a && source .env && set +a && mvn spring-boot:run`; Windows: PowerShell one-liner) |
 | [POSTMAN.md](POSTMAN.md) | Postman collection, variables, HTTP/HTTPS, reverse-flow ISO format |
-| [TESTING_GUIDE.md](TESTING_GUIDE.md) | HTTP + HTTPS + TCP + TLS testing (Postman, curl, PowerShell) |
+| [TESTING_GUIDE.md](TESTING_GUIDE.md) | HTTP + HTTPS + TCP + TLS testing; start services with .env loaded (Bash + PowerShell) |
 | [socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.md) | Socket protocol, PowerShell copy-paste APIs, TLS, troubleshooting |
 | [socket/SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.md) | SSL/TLS keytool, OpenSSL, firewall, keystore paths |
 

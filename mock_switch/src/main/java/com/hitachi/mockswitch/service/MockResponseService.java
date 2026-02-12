@@ -83,12 +83,12 @@ public class MockResponseService {
             return iso;
 
         } catch (ISOException e) {
-            System.err.println("Failed to parse ISO: " + e.getMessage());
+            log.warn("Failed to parse ISO: {}", e.getMessage());
             return null;
         }
     }
 
-    private String formatIsoForConsole(byte[] isoBytes) {
+    public String formatIsoForConsole(byte[] isoBytes) {
         try {
             ISOMsg iso = new ISOMsg();
             iso.setPackager(packager);
@@ -148,7 +148,7 @@ public class MockResponseService {
             sendToBackend(respIso, endpoint, "RESPPAY");
 
         } catch (Exception e) {
-            System.err.println("Error sending RespPay: " + e.getMessage());
+            log.error("Error sending RespPay: {}", e.getMessage(), e);
         }
     }
 
@@ -183,7 +183,7 @@ public class MockResponseService {
             sendToBackend(respIso, endpoint, "RESPCHKTXN");
 
         } catch (Exception e) {
-            System.err.println("Error sending RespChkTxn: " + e.getMessage());
+            log.error("Error sending RespChkTxn: {}", e.getMessage(), e);
         }
     }
 
@@ -217,7 +217,7 @@ public class MockResponseService {
             sendToBackend(respIso, endpoint, "RESPHBT");
 
         } catch (Exception e) {
-            System.err.println("Error sending RespHbt: " + e.getMessage());
+            log.error("Error sending RespHbt: {}", e.getMessage(), e);
         }
     }
 
@@ -256,7 +256,7 @@ public class MockResponseService {
             sendToBackend(respIso, endpoint, "RESPVALADD");
 
         } catch (Exception e) {
-            System.err.println("Error sending RespValAdd: " + e.getMessage());
+            log.error("Error sending RespValAdd: {}", e.getMessage(), e);
         }
     }
 
@@ -292,7 +292,7 @@ public class MockResponseService {
             sendToBackend(respIso, endpoint, "RESPLISTACCPVD");
 
         } catch (Exception e) {
-            System.err.println("Error sending RespListAccPvd: " + e.getMessage());
+            log.error("Error sending RespListAccPvd: {}", e.getMessage(), e);
         }
     }
 
@@ -306,7 +306,7 @@ public class MockResponseService {
             iso.unpack(isoBytes);
             return iso;
         } catch (ISOException e) {
-            System.err.println("Failed to unpack ISO: " + e.getMessage());
+            log.warn("Failed to unpack ISO: {}", e.getMessage());
             return null;
         }
     }
@@ -321,11 +321,14 @@ public class MockResponseService {
         try {
             byte[] packed = iso.pack();
             String respDisplay = formatIsoForConsole(packed);
-            log.info("[MOCK_SWITCH] ISO response sent to IMPS (HTTP {}, length={})", type, packed.length);
-            log.info("[MOCK_SWITCH] ISO response:\n{}", respDisplay);
-            System.out.println("[MOCK_SWITCH] ISO response sent to IMPS:");
+            log.info("[MOCK_SWITCH] ========== RESPONSE TO IMPS (HTTP) ==========");
+            log.info("[MOCK_SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, packed.length);
+            log.info("[MOCK_SWITCH] ISO response sent to IMPS:\n{}", respDisplay);
+            System.out.println("==========================================");
+            System.out.println("[MOCK_SWITCH] RESPONSE TO IMPS (HTTP)");
+            System.out.println("Message Type: " + type + " | Endpoint: " + endpoint + " | Length: " + packed.length + " bytes");
+            System.out.println("==========================================");
             System.out.println(respDisplay);
-            System.out.println("[MOCK_SWITCH] SENDING " + type + " to IMPS Backend " + endpoint + " (" + packed.length + " bytes)");
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             HttpEntity<byte[]> request = new HttpEntity<>(packed, headers);
@@ -336,13 +339,20 @@ public class MockResponseService {
                 byte[].class
             );
             byte[] body = response.getBody();
-            System.out.println("[MOCK_SWITCH] IMPS Backend response: " + response.getStatusCode() + (body != null ? " | body " + body.length + " bytes" : ""));
+            log.info("[MOCK_SWITCH] ========== ACK FROM IMPS (HTTP) ==========");
+            log.info("[MOCK_SWITCH] Status: {} | Response Length: {} bytes", response.getStatusCode(), body != null ? body.length : 0);
+            System.out.println("==========================================");
+            System.out.println("[MOCK_SWITCH] ACK FROM IMPS (HTTP)");
+            System.out.println("Status: " + response.getStatusCode() + " | Response Length: " + (body != null ? body.length : 0) + " bytes");
+            System.out.println("==========================================");
             if (body != null && body.length > 0) {
-                System.out.println("[MOCK_SWITCH] IMPS response (ISO) received:");
-                System.out.println(formatIsoForConsole(body));
+                String ackDisplay = formatIsoForConsole(body);
+                log.info("[MOCK_SWITCH] IMPS ACK (ISO) received:\n{}", ackDisplay);
+                System.out.println("[MOCK_SWITCH] IMPS ACK (ISO) received:");
+                System.out.println(ackDisplay);
             }
         } catch (Exception e) {
-            System.err.println("Failed to send to IMPS Backend: " + e.getMessage());
+            log.error("[MOCK_SWITCH] Failed to send to IMPS Backend: {}", e.getMessage(), e);
         }
     }
 
@@ -362,7 +372,11 @@ public class MockResponseService {
             Thread.sleep(responseDelayMs);
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return null;
+            log.info("[MOCK_SWITCH] Processing ReqPay - updating account_master (debit/credit)");
+            System.out.println("[MOCK_SWITCH] Processing ReqPay - updating account_master (debit/credit)");
             String responseCode = accountLedgerService.debitAndCredit(reqIso);
+            log.info("[MOCK_SWITCH] Account ledger update completed with response code: {}", responseCode);
+            System.out.println("[MOCK_SWITCH] Account ledger update completed with response code: " + responseCode);
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
             respIso.setMTI("0210");
@@ -374,7 +388,7 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber()); respIso.set(39, responseCode);
             return respIso.pack();
         } catch (Exception e) {
-            System.err.println("buildRespPaySync: " + e.getMessage());
+            log.error("[MOCK_SWITCH] buildRespPaySync error: {}", e.getMessage(), e);
             return null;
         }
     }
@@ -394,7 +408,7 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber()); respIso.set(39, "00");
             return respIso.pack();
         } catch (Exception e) {
-            System.err.println("buildRespChkTxnSync: " + e.getMessage());
+            log.warn("buildRespChkTxnSync: {}", e.getMessage());
             return null;
         }
     }
@@ -413,7 +427,7 @@ public class MockResponseService {
             respIso.set(13, LocalDateTime.now().format(DATE_FORMAT)); respIso.set(39, "00");
             return respIso.pack();
         } catch (Exception e) {
-            System.err.println("buildRespHbtSync: " + e.getMessage());
+            log.warn("buildRespHbtSync: {}", e.getMessage());
             return null;
         }
     }
@@ -446,7 +460,7 @@ public class MockResponseService {
             respIso.set(48, accountHolderName.isEmpty() ? "INVALID_ACCOUNT" : accountHolderName);
             return respIso.pack();
         } catch (Exception e) {
-            System.err.println("buildRespValAddSync: " + e.getMessage());
+            log.warn("buildRespValAddSync: {}", e.getMessage());
             return null;
         }
     }
@@ -466,7 +480,7 @@ public class MockResponseService {
             respIso.set(48, "HDFC|ICICI|SBI|AXIS");
             return respIso.pack();
         } catch (Exception e) {
-            System.err.println("buildRespListAccPvdSync: " + e.getMessage());
+            log.warn("buildRespListAccPvdSync: {}", e.getMessage());
             return null;
         }
     }
@@ -477,6 +491,15 @@ public class MockResponseService {
      */
     public void forwardIsoToBackend(byte[] isoBytes, String endpoint, String type) {
         try {
+            String isoDisplay = formatIsoForConsole(isoBytes);
+            log.info("[MOCK_SWITCH] ========== FORWARDING RESPONSE TO IMPS (HTTP) ==========");
+            log.info("[MOCK_SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, isoBytes.length);
+            log.info("[MOCK_SWITCH] ISO being forwarded:\n{}", isoDisplay);
+            System.out.println("==========================================");
+            System.out.println("[MOCK_SWITCH] FORWARDING RESPONSE TO IMPS (HTTP)");
+            System.out.println("Message Type: " + type + " | Endpoint: " + endpoint + " | Length: " + isoBytes.length + " bytes");
+            System.out.println("==========================================");
+            System.out.println(isoDisplay);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             HttpEntity<byte[]> request = new HttpEntity<>(isoBytes, headers);
@@ -487,10 +510,18 @@ public class MockResponseService {
                 byte[].class
             );
             byte[] isoAck = response.getBody();
-            System.out.println("[MOCK_SWITCH] FORWARDED " + type + " to IMPS Backend: " + response.getStatusCode()
+            log.info("[MOCK_SWITCH] Forwarded {} to IMPS Backend: {} | ACK Length: {} bytes", 
+                type, response.getStatusCode(), isoAck != null ? isoAck.length : 0);
+            System.out.println("[MOCK_SWITCH] Forwarded " + type + " to IMPS Backend: " + response.getStatusCode()
                 + (isoAck != null && isoAck.length > 0 ? " | ISO ACK received (" + isoAck.length + " bytes)" : ""));
+            if (isoAck != null && isoAck.length > 0) {
+                String ackDisplay = formatIsoForConsole(isoAck);
+                log.info("[MOCK_SWITCH] IMPS ACK received:\n{}", ackDisplay);
+                System.out.println("[MOCK_SWITCH] IMPS ACK received:");
+                System.out.println(ackDisplay);
+            }
         } catch (Exception e) {
-            System.err.println("Forward to IMPS Backend failed: " + e.getMessage());
+            log.error("[MOCK_SWITCH] Forward to IMPS Backend failed: {}", e.getMessage(), e);
         }
     }
 }

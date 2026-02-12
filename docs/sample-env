@@ -1,0 +1,64 @@
+# ===========================================
+# Sample environment variables for IMPS project
+# ===========================================
+# Each application has a .env file in its directory (Imps-backend/.env, mock_switch/.env, mock_npci/.env).
+# application.yml reads these when the process is started with the env loaded.
+#
+# How to run with .env loaded
+# --------------------------
+# Linux / Mac (Bash):
+#   cd Imps-backend
+#   set -a && source .env && set +a && mvn spring-boot:run
+#
+#   cd mock_switch
+#   set -a && source .env && set +a && mvn spring-boot:run
+#
+#   cd mock_npci
+#   set -a && source .env && set +a && mvn spring-boot:run
+#
+# Windows (PowerShell) – load .env then run:
+#   cd Imps-backend
+#   Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
+#
+#   (Same pattern for mock_switch and mock_npci: cd to folder, then the Get-Content line with mvn spring-boot:run.)
+#
+# HTTPS (ssl profile): append -Dspring-boot.run.profiles=ssl to mvn spring-boot:run.
+# Docker: use env_file: .env in docker-compose.
+# ===========================================
+
+# --------------- Imps-backend (.env in Imps-backend/) ---------------
+# SERVER_PORT=8081
+# SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/imps_db
+# SPRING_DATASOURCE_USERNAME=postgres
+# SPRING_DATASOURCE_PASSWORD=root
+# SSL_KEY_STORE=file:E:/Hitachi_Project/certs/imps-keystore.jks
+# SSL_KEY_STORE_PASSWORD=IMPS-Backend
+# SSL_TRUST_STORE=file:E:/Hitachi_Project/certs/imps-truststore.jks
+# SSL_TRUST_STORE_PASSWORD=IMPS-Backend
+# NPCI_SOCKET_HOST=192.168.1.38
+# NPCI_SOCKET_PORT=9445
+# NPCI_SOCKET_TRUST_STORE=file:E:/Hitachi_Project/certs/imps-truststore.jks
+# NPCI_SOCKET_TRUST_STORE_PASSWORD=IMPS-Backend
+# ROUTING_SWITCH_SOCKET_HOST=localhost
+# ROUTING_SWITCH_SOCKET_PORT=9084
+# ROUTING_SWITCH_SOCKET_TRUST_STORE=file:E:/Hitachi_Project/certs/switch-truststore.jks
+# ROUTING_SWITCH_SOCKET_TRUST_STORE_PASSWORD=IMPS-Backend
+# IMPS_ORG_ID=BANK01
+
+# --------------- mock_switch (.env in mock_switch/) ---------------
+# SERVER_PORT=8082
+# SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/switch_db
+# SPRING_DATASOURCE_USERNAME=postgres
+# SPRING_DATASOURCE_PASSWORD=root
+# IMPS_IMPS_IP=192.168.1.38
+# IMPS_IMPS_PORT=8081
+# IMPS_BASE_PATH=/imps
+# SOCKET_SSL_KEY_STORE=file:../certs/switch-keystore.jks
+# SOCKET_SSL_KEY_STORE_PASSWORD=IMPS-Backend
+# MOCK_RESPONSE_DELAY_MS=500
+# MOCK_DEFAULT_RESULT=SUCCESS
+
+# --------------- mock_npci (.env in mock_npci/) ---------------
+# SERVER_PORT=8083
+# SOCKET_SSL_KEY_STORE=file:../certs/npci-keystore.jks
+# SOCKET_SSL_KEY_STORE_PASSWORD=IMPS-Backend

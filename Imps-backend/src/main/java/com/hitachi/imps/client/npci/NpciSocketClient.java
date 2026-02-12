@@ -39,8 +39,14 @@ public class NpciSocketClient {
         int connectTimeout = sock.getConnectTimeoutMs();
         int readTimeout = sock.getReadTimeoutMs();
         boolean useSsl = sock.isSslEnabled();
+        String protocol = useSsl ? "SSL/TLS" : "TCP";
+        Socket socket = null;
         try {
-            Socket socket;
+            System.out.println("==========================================");
+            System.out.println("[IMPS] OPENING CONNECTION TO NPCI");
+            System.out.println("Protocol: " + protocol + " | Host: " + host + " | Port: " + port);
+            System.out.println("==========================================");
+            
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
                     sock.getTrustStore(), sock.getTrustStorePassword(),
@@ -49,36 +55,48 @@ public class NpciSocketClient {
                 sslSocket.connect(new InetSocketAddress(host, port), connectTimeout);
                 sslSocket.startHandshake();
                 socket = sslSocket;
+                System.out.println("[IMPS] SSL/TLS handshake completed with NPCI");
             } else {
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(host, port), connectTimeout);
+                System.out.println("[IMPS] TCP connection established with NPCI");
             }
-            try {
-                socket.setSoTimeout(readTimeout);
-                try (DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                     DataInputStream in = new DataInputStream(socket.getInputStream())) {
-                    byte[] payload = respXml.getBytes(StandardCharsets.UTF_8);
-                    out.writeInt(payload.length);
-                    out.write(payload);
-                    out.flush();
-                    int ackLen = in.readInt();
-                    if (ackLen <= 0 || ackLen > MAX_ACK_SIZE) {
-                        log.warn("Invalid ACK length from NPCI: {}", ackLen);
-                        return false;
-                    }
-                    byte[] ackPayload = new byte[ackLen];
-                    in.readFully(ackPayload);
-                    return true;
+            
+            socket.setSoTimeout(readTimeout);
+            try (DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                 DataInputStream in = new DataInputStream(socket.getInputStream())) {
+                byte[] payload = respXml.getBytes(StandardCharsets.UTF_8);
+                System.out.println("[IMPS] Sending XML response to NPCI (" + payload.length + " bytes)");
+                out.writeInt(payload.length);
+                out.write(payload);
+                out.flush();
+                
+                System.out.println("[IMPS] Waiting for ACK from NPCI...");
+                int ackLen = in.readInt();
+                if (ackLen <= 0 || ackLen > MAX_ACK_SIZE) {
+                    log.warn("[IMPS] Invalid ACK length from NPCI: {}", ackLen);
+                    return false;
                 }
-            } finally {
-                socket.close();
+                byte[] ackPayload = new byte[ackLen];
+                in.readFully(ackPayload);
+                System.out.println("[IMPS] ACK received from NPCI (" + ackPayload.length + " bytes)");
+                return true;
             }
         } catch (IOException e) {
-            log.error("Failed to send response to NPCI {}:{}: {}", host, port, e.getMessage());
+            log.error("[IMPS] Failed to send response to NPCI {}:{}: {}", host, port, e.getMessage());
+            log.error("[IMPS] Failed to send response to NPCI {}:{}: {}", host, port, e.getMessage(), e);
             return false;
         } catch (Exception e) {
-            log.error("SSL setup failed for NPCI {}:{}: {}", host, port, e.getMessage());
+            log.error("[IMPS] SSL setup failed for NPCI {}:{}: {}", host, port, e.getMessage(), e);
             return false;
+        } finally {
+            if (socket != null) {
+                try {
+                    socket.close();
+                } catch (IOException e) {
+                    log.debug("[IMPS] Error closing socket to NPCI: {}", e.getMessage());
+                }
+            }
         }
     }
 }

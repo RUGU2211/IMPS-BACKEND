@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import com.hitachi.mockswitch.repository.AccountMasterRepository;
 @Service
 public class AccountLedgerService {
 
+    private static final Logger log = LoggerFactory.getLogger(AccountLedgerService.class);
     private static final String ACTIVE = "ACTIVE";
     private static final String IMPS_Y = "Y";
 
@@ -55,13 +58,13 @@ public class AccountLedgerService {
             String rrn = reqIso.hasField(37) ? reqIso.getString(37) : null;
 
             if (payerAccount == null || payeeAccount == null || amountPaise == null) {
-                System.err.println("AccountLedger: missing DE4/DE32/DE33/DE102/DE103");
+                log.warn("AccountLedger: missing DE4/DE32/DE33/DE102/DE103");
                 return RC_INVALID_ACCOUNT;
             }
 
             BigDecimal amountRupees = paiseToRupees(amountPaise);
             if (amountRupees.compareTo(BigDecimal.ZERO) <= 0) {
-                System.err.println("AccountLedger: invalid amount " + amountPaise);
+                log.warn("AccountLedger: invalid amount {}", amountPaise);
                 return RC_INVALID_ACCOUNT;
             }
 
@@ -93,24 +96,35 @@ public class AccountLedgerService {
             LocalDateTime now = LocalDateTime.now();
 
             // Debit payer
+            BigDecimal oldPayerBalance = payer.getAvailableBalance() != null ? payer.getAvailableBalance() : BigDecimal.ZERO;
             payer.setAvailableBalance(balance.subtract(amountRupees));
             payer.setLastTxnRrn(rrn);
             payer.setLastUpdatedTime(now);
             accountMasterRepository.save(payer);
+            System.out.println("[MOCK_SWITCH] ========== ACCOUNT_MASTER UPDATE (DEBIT) ==========");
+            System.out.println("[MOCK_SWITCH] Account: " + payer.getAccountNumber() + "@" + payer.getIfscCode());
+            System.out.println("[MOCK_SWITCH] Old Balance: " + oldPayerBalance + " | Amount Debited: " + amountRupees + " | New Balance: " + payer.getAvailableBalance());
+            System.out.println("[MOCK_SWITCH] RRN: " + rrn + " | Updated Time: " + now);
+            System.out.println("==========================================");
 
             // Credit payee
             BigDecimal payeeBalance = payee.getAvailableBalance() != null ? payee.getAvailableBalance() : BigDecimal.ZERO;
+            BigDecimal oldPayeeBalance = payeeBalance;
             payee.setAvailableBalance(payeeBalance.add(amountRupees));
             payee.setLastTxnRrn(rrn);
             payee.setLastUpdatedTime(now);
             accountMasterRepository.save(payee);
+            System.out.println("[MOCK_SWITCH] ========== ACCOUNT_MASTER UPDATE (CREDIT) ==========");
+            System.out.println("[MOCK_SWITCH] Account: " + payee.getAccountNumber() + "@" + payee.getIfscCode());
+            System.out.println("[MOCK_SWITCH] Old Balance: " + oldPayeeBalance + " | Amount Credited: " + amountRupees + " | New Balance: " + payee.getAvailableBalance());
+            System.out.println("[MOCK_SWITCH] RRN: " + rrn + " | Updated Time: " + now);
+            System.out.println("==========================================");
 
             System.out.println("[MOCK_SWITCH] Ledger: DEBIT " + amountRupees + " from " + payer.getAccountNumber() + "@" + payer.getIfscCode() + " -> CREDIT to " + payee.getAccountNumber() + "@" + payee.getIfscCode() + " RRN=" + rrn);
             return RC_SUCCESS;
 
         } catch (Exception e) {
-            System.err.println("AccountLedger: error " + e.getMessage());
-            e.printStackTrace();
+            log.error("AccountLedger: error {}", e.getMessage(), e);
             return RC_SYSTEM_ERROR;
         }
     }

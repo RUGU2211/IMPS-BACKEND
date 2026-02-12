@@ -1,36 +1,44 @@
 # ===========================================
-# IMPS BACKEND – Application configuration
+# IMPS BACKEND – Application Configuration
 # ===========================================
 # HTTP (default): server.port 8081
 # HTTPS: run with --spring.profiles.active=ssl → server.port 8443 (run certs/generate-certs.bat first)
-
-# ===========================================
-# FLAGS (true / false) – when each is used 
-# ===========================================
-# npci.compliant-flow
-#   true  = NPCI connects → Req → IMPS ACK → NPCI closes; then IMPS opens NEW socket to NPCI → Resp → NPCI ACK
-#   false = Same socket: read ACK then response on same connection
 #
-# routing.switch.socket.enabled   true = send to Switch via TCP socket; false = do not use socket
-# routing.switch.rest.enabled     true = send to Switch via REST; false = do not use REST (socket default)
-# ssl.enabled                     true = NPCI socket server uses TLS (ssl-port 9443); false = plain TCP (port 9083)
-# npci.socket.ssl-enabled         true = IMPS connects to NPCI mock with TLS (e.g. 9445)
-# routing.switch.socket.ssl-enabled  true = IMPS connects to Switch with TLS (e.g. 9444)
-# imps.heartbeat.switch-check-enabled  true = ping each bank switch periodically and update institution_master.active
+# CONNECTION FLOW EXPLANATION:
+# ===========================================
+# FLOW 1: NPCI → IMPS → Switch → IMPS → NPCI (Request Flow)
+# ---------------------------------------------------------
+# Connection 1: NPCI connects to IMPS (socket) → sends Req → IMPS sends ACK → NPCI closes connection
+# Connection 2: IMPS opens NEW connection to Switch (socket) → sends Req → Switch sends Resp → IMPS closes connection
+# Connection 3: Switch opens NEW connection to IMPS (socket) → sends Resp → IMPS sends ACK → Switch closes connection
+# Connection 4: IMPS opens NEW connection to NPCI (socket) → sends Resp → NPCI sends ACK → IMPS closes connection
+#
+# FLOW 2: Switch → IMPS → NPCI → IMPS → Switch (Reverse Flow)
+# ---------------------------------------------------------
+# Connection 1: Switch connects to IMPS (socket) → sends Req → IMPS sends Resp → Switch closes connection
+# Connection 2: IMPS opens NEW connection to NPCI (socket) → sends Req → NPCI sends Resp → IMPS closes connection
+# Connection 3: NPCI opens NEW connection to IMPS (socket) → sends Resp → IMPS sends ACK → NPCI closes connection
+# Connection 4: IMPS opens NEW connection to Switch (socket) → sends Resp → Switch sends ACK → IMPS closes connection
+#
+# IMPORTANT: Each connection is opened, used, and closed immediately after use.
+# Connections are NOT reused - new connection is opened for each message exchange.
+# ===========================================
 
 # ===========================================
-# SERVER (HTTP default; HTTPS via profile 'ssl' below)
+# SERVER CONFIGURATION
+# ===========================================
+# Values are read from environment (set from .env; see docs/sample-env).
 # ===========================================
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 spring:
   application:
     name: Imps-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/imps_db
-    username: postgres
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/imps_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
 
   jpa:
     hibernate:
@@ -43,93 +51,112 @@ spring:
         format_sql: true
 
 # ===========================================
-# ROUTING
+# CONNECTION FLOW CONFIGURATION
 # ===========================================
-# NPCI → IMPS: {server.port}/imps/{reqtype}/{txn_id}
-# IMPS → Switch: institution_master (switch_ip, switch_port) or fallback below (socket 9084 / 9444)
-# Switch → IMPS: {server.port}/imps/{resptype}/{txn_id}
-# IMPS → NPCI: routing.npci.base-url (REST) or npci.socket (when npci.compliant-flow: true)
+# npci.compliant-flow: true
+#   - NPCI connects → sends Req → IMPS ACK → NPCI closes connection
+#   - Then IMPS opens NEW socket to NPCI → sends Resp → NPCI ACK → IMPS closes connection
+#   - This ensures clean connection management (open → use → close)
+#
+# npci.compliant-flow: false
+#   - Same socket: NPCI connects → sends Req → IMPS ACK → IMPS sends Resp → NPCI ACK → close
+#   - NOT RECOMMENDED - use true for proper connection management
 # ===========================================
-
 npci:
   compliant-flow: true
   socket:
-    host: 192.168.1.38
-    port: 9445
-    ssl-enabled: true
-    trust-store: file:E:\Hitachi_Project/certs/imps-truststore.jks
-    trust-store-password: IMPS-Backend
+    host: ${NPCI_SOCKET_HOST:192.168.1.38}
+    port: ${NPCI_SOCKET_PORT:9445}
+    ssl-enabled: ${NPCI_SOCKET_SSL_ENABLED:true}
+    trust-store: ${NPCI_SOCKET_TRUST_STORE:file:E:/Hitachi_Project/certs/imps-truststore.jks}
+    trust-store-password: ${NPCI_SOCKET_TRUST_STORE_PASSWORD:IMPS-Backend}
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
 
+# ===========================================
+# ROUTING CONFIGURATION
+# ===========================================
+# Defines how IMPS routes messages between NPCI and Switch
+# ===========================================
 routing:
+  # NPCI Routing (for REST fallback - not used when npci.compliant-flow: true)
   npci:
-    base-url: http://localhost:8083
+    base-url: http://localhost:8083  # NPCI Mock REST endpoint (fallback)
     endpoints:
       ack: /npci/ack
+  
+  # Switch Routing
   switch:
     base-url: http://localhost:8082
     socket:
       enabled: true
-      host: localhost
-      port: 9084
-      ssl-enabled: true
-      trust-store: file:E:\Hitachi_Project/certs/switch-truststore.jks
-      trust-store-password: IMPS-Backend
+      host: ${ROUTING_SWITCH_SOCKET_HOST:localhost}
+      port: ${ROUTING_SWITCH_SOCKET_PORT:9084}
+      ssl-enabled: ${ROUTING_SWITCH_SOCKET_SSL_ENABLED:true}
+      trust-store: ${ROUTING_SWITCH_SOCKET_TRUST_STORE:file:E:/Hitachi_Project/certs/switch-truststore.jks}
+      trust-store-password: ${ROUTING_SWITCH_SOCKET_TRUST_STORE_PASSWORD:IMPS-Backend}
     rest:
       enabled: false
 
 # ===========================================
-# SSL/TLS – NPCI socket server (inbound)
+# SSL/TLS CONFIGURATION - NPCI Socket Server (Inbound)
 # ===========================================
-# ssl.enabled true → NpciSocketServer uses SSLServerSocket on ssl-port (9443)
+# When NPCI connects to IMPS, IMPS listens on these ports:
+# - TCP: port 9083 (when ssl.enabled: false)
+# - SSL/TLS: port 9443 (when ssl.enabled: true)
+# ===========================================
 ssl:
   enabled: true
-  key-store: file:E:\Hitachi_Project/certs/imps-keystore.jks
-  key-store-password: IMPS-Backend
+  key-store: ${SSL_KEY_STORE:file:E:/Hitachi_Project/certs/imps-keystore.jks}
+  key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
   key-alias: imps
-  trust-store: file:E:\Hitachi_Project/certs/imps-truststore.jks
-  trust-store-password: IMPS-Backend
-  client-auth: none   # none | want | need (need = mTLS)
+  trust-store: ${SSL_TRUST_STORE:file:E:/Hitachi_Project/certs/imps-truststore.jks}
+  trust-store-password: ${SSL_TRUST_STORE_PASSWORD:IMPS-Backend}
+  client-auth: none
 
 # ===========================================
-# SOCKET SERVERS
+# SOCKET SERVER CONFIGURATION
 # ===========================================
-# NPCI → IMPS: [4-byte length][XML] on port 9083 / 9443 (ssl.enabled)
-# Switch → IMPS (reverse): [4-byte length][ISO] on port 9086 / 9446 (same connection pattern)
+# IMPS listens for incoming socket connections from NPCI and Switch
+# ===========================================
 socket:
-  enabled: true
+  enabled: true                 # true = start socket servers
   server:
-    bind-host: 0.0.0.0
+    bind-host: 0.0.0.0         # Listen on all interfaces
+    # NPCI Socket Server (NPCI → IMPS)
     npci:
-      port: 9083
-      ssl-port: 9443
+      port: 9083                # TCP port (used when ssl.enabled: false)
+      ssl-port: 9443           # SSL/TLS port (used when ssl.enabled: true)
+    # Switch Socket Server (Switch → IMPS reverse flow)
     switch:
-      enabled: true
-      port: 9086
-      ssl-port: 9446
-  max-xml-size: 1048576
-  response-timeout-seconds: 60
+      enabled: true             # true = listen for Switch connections
+      port: 9086               # TCP port (used when ssl.enabled: false)
+      ssl-port: 9446           # SSL/TLS port (used when ssl.enabled: true)
+  max-xml-size: 1048576        # Max message size (1MB)
+  response-timeout-seconds: 60  # Response timeout
 
 # ===========================================
-# IMPS API & HEARTBEAT
+# IMPS API & HEARTBEAT CONFIGURATION
 # ===========================================
 imps:
   api:
     version: "2.1"
-  org-id: "BANK01"
+  org-id: ${IMPS_ORG_ID:BANK01}
   heartbeat:
-    switch-check-enabled: true
-    switch-check-interval-ms: 180000
-    switch-check-initial-delay-ms: 10000
-    # When switch_port is in this list, switch-check uses TLS (e.g. mock_switch SSL port 9444)
+    switch-check-enabled: true           # true = periodically check switch connectivity
+    switch-check-interval-ms: 180000    # Check every 3 minutes
+    switch-check-initial-delay-ms: 10000 # Start checking after 10 seconds
+    # Ports that use SSL/TLS for switch connectivity checks
     switch-check-ssl-ports: 9444,9443,9445
 
 # ===========================================
-# PROFILE: ssl – REST over HTTPS (optional)
+# PROFILE: ssl – REST over HTTPS (Optional)
 # ===========================================
 # Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-# IMPS: https://localhost:8443 | Switch: https://localhost:8082 | NPCI mock: https://localhost:8445
+# IMPS: https://localhost:8443
+# Switch: https://localhost:8082
+# NPCI mock: https://localhost:8445
+# ===========================================
 ---
 spring:
   config:
@@ -139,8 +166,8 @@ server:
   port: 8443
   ssl:
     enabled: true
-    key-store: file:E:\Hitachi_Project/certs/imps-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SSL_KEY_STORE:file:E:/Hitachi_Project/certs/imps-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
     key-store-type: JKS
     key-alias: imps
 

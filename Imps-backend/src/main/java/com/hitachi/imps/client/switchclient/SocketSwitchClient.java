@@ -9,13 +9,14 @@ import java.net.Socket;
 import javax.net.ssl.SSLSocket;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.hitachi.imps.config.RoutingConfig;
 import com.hitachi.imps.config.SslConfig;
-import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.routing.SwitchAddressResolver.SwitchAddress;
 import com.hitachi.imps.util.IsoUtil;
@@ -23,6 +24,8 @@ import com.hitachi.imps.util.IsoUtil;
 @Component
 @ConditionalOnProperty(name = "routing.switch.socket.enabled", havingValue = "true", matchIfMissing = true)
 public class SocketSwitchClient implements ISwitchClient {
+
+    private static final Logger log = LoggerFactory.getLogger(SocketSwitchClient.class);
 
     @Autowired
     private SwitchAddressResolver switchAddressResolver;
@@ -38,7 +41,14 @@ public class SocketSwitchClient implements ISwitchClient {
         var sockConfig = routingConfig.getSwitch().getSocket();
         boolean useSsl = sockConfig != null && sockConfig.isSslEnabled();
         Socket s = null;
+        String protocol = useSsl ? "SSL/TLS" : "TCP";
         try {
+            System.out.println("==========================================");
+            System.out.println("[IMPS] OPENING CONNECTION TO SWITCH");
+            System.out.println("Protocol: " + protocol + " | Host: " + host + " | Port: " + port);
+            System.out.println("Message Type: " + apiType + " | TxnId: " + txnId);
+            System.out.println("==========================================");
+            
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
                     sockConfig.getTrustStore(), sockConfig.getTrustStorePassword(),
@@ -47,28 +57,45 @@ public class SocketSwitchClient implements ISwitchClient {
                 ssl.connect(new InetSocketAddress(host, port), 10000);
                 ssl.startHandshake();
                 s = ssl;
+                System.out.println("[IMPS] SSL/TLS handshake completed with Switch");
             } else {
-                s = new Socket(host, port);
+                s = new Socket();
+                s.connect(new InetSocketAddress(host, port), 10000);
+                System.out.println("[IMPS] TCP connection established with Switch");
             }
             s.setSoTimeout(READ_TIMEOUT_MS);
+            
+            System.out.println("[IMPS] Sending ISO message to Switch (" + isoBytes.length + " bytes)");
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
             DataInputStream in = new DataInputStream(s.getInputStream());
             out.writeInt(isoBytes.length);
             out.write(isoBytes);
             out.flush();
+            
+            System.out.println("[IMPS] Waiting for response from Switch...");
             int respLen = in.readInt();
-            if (respLen <= 0 || respLen > MAX_ISO_SIZE) return null;
+            if (respLen <= 0 || respLen > MAX_ISO_SIZE) {
+                System.err.println("[IMPS] Invalid response length from Switch: " + respLen);
+                return null;
+            }
             byte[] resp = new byte[respLen];
             in.readFully(resp);
+            System.out.println("[IMPS] Response received from Switch (" + resp.length + " bytes)");
             return resp;
         } catch (IOException e) {
-            System.err.println("Switch socket send failed [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            log.error("[IMPS] Switch socket send failed [{}]/{}: {}", apiType, txnId, e.getMessage(), e);
             return null;
         } catch (Exception e) {
-            System.err.println("Switch SSL setup failed [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            log.error("[IMPS] Switch SSL setup failed [{}]/{}: {}", apiType, txnId, e.getMessage(), e);
             return null;
         } finally {
-            if (s != null) try { s.close(); } catch (IOException ignored) {}
+            if (s != null) {
+                try {
+                    s.close();
+                } catch (IOException e) {
+                    log.debug("[IMPS] Error closing socket to Switch: {}", e.getMessage());
+                }
+            }
         }
     }
 

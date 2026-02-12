@@ -26,9 +26,9 @@ Test the IMPS NPCI socket with PowerShell only (no extra tools).
 
 ## Prerequisites
 
-1. Start **IMPS Backend** (socket enabled, port 9083)
-2. For ReqPay/ReqChkTxn/ReqValAdd: start **mock_switch** (port 9084)
-3. For **npci.compliant-flow: true**: start **mock_npci** (port 9085) so IMPS can send Resp outbound
+1. Start **IMPS Backend** (socket enabled, port 9083): load `.env` then run (e.g. `set -a && source .env && set +a && mvn spring-boot:run` on Linux/Mac; see [../sample-env](../sample-env) and [../TESTING_GUIDE.md](../TESTING_GUIDE.md) for Windows).
+2. For ReqPay/ReqChkTxn/ReqValAdd: start **mock_switch** (port 9084) with `.env` loaded.
+3. For **npci.compliant-flow: true**: start **mock_npci** (port 9085) with `.env` loaded so IMPS can send Resp outbound.
 4. REST optional: set `routing.switch.rest.enabled: true` in IMPS for HTTP instead of socket
 
 ---
