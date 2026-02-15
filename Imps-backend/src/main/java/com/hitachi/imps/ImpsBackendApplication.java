@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+import com.hitachi.imps.config.ImpsServerDisplayInfo;
 import com.hitachi.imps.config.RoutingConfig;
 
 @EnableAsync
@@ -24,15 +25,12 @@ public class ImpsBackendApplication {
     }
 
     @Bean
-    public ApplicationRunner startupBanner(Environment env) {
+    public ApplicationRunner startupBanner(ImpsServerDisplayInfo displayInfo, Environment env) {
         return args -> {
-            String port = env.getProperty("local.server.port", "?");
             String profile = env.getProperty("spring.profiles.active", "default");
-            String protocol = env.getProperty("server.ssl.key-store") != null ? "https" : "http";
             System.out.println("===========================================");
             System.out.println("  IMPS Backend Application Started");
-            String host = env.getProperty("server.address", "localhost");
-            System.out.println("  " + protocol.toUpperCase() + " : " + host + ":" + port);
+            System.out.println("  " + displayInfo.getBaseUrl());
             System.out.println("  Profile: " + profile);
             System.out.println("===========================================");
         };

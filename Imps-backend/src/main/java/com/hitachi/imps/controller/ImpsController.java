@@ -22,6 +22,7 @@ import com.hitachi.imps.service.pay.ReqPayService;
 import com.hitachi.imps.service.pay.RespPayService;
 import com.hitachi.imps.service.valadd.ReqValAddService;
 import com.hitachi.imps.service.valadd.RespValAddService;
+import com.hitachi.imps.config.ImpsServerDisplayInfo;
 
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
@@ -64,6 +65,8 @@ public class ImpsController {
     private ReqValAddService reqValAddService;
     @Autowired
     private RespValAddService respValAddService;
+    @Autowired
+    private ImpsServerDisplayInfo impsServerDisplay;
 
     private AckSender restAckSender() {
         return ack -> npciRestClient.sendAck(ack);
@@ -74,6 +77,7 @@ public class ImpsController {
     public String reqpay(@PathVariable String txnId, @RequestBody String xml) throws ReqPayValidationException {
         System.out.println("==========================================");
         System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("Message Type: ReqPay | TxnId: " + txnId + " | Format: XML");
         System.out.println("==========================================");
         System.out.println(xml);
@@ -86,6 +90,7 @@ public class ImpsController {
     public String reqchktxn(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
         System.out.println("==========================================");
         System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("Message Type: ReqChkTxn | TxnId: " + txnId + " | Format: XML");
         System.out.println("==========================================");
         System.out.println(xml);
@@ -98,6 +103,7 @@ public class ImpsController {
     public String reqhbt(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
         System.out.println("==========================================");
         System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("Message Type: ReqHbt | TxnId: " + txnId + " | Format: XML");
         System.out.println("==========================================");
         System.out.println(xml);
@@ -110,6 +116,7 @@ public class ImpsController {
     public String reqlistaccpvd(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
         System.out.println("==========================================");
         System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("Message Type: ReqListAccPvd | TxnId: " + txnId + " | Format: XML");
         System.out.println("==========================================");
         System.out.println(xml);
@@ -122,6 +129,7 @@ public class ImpsController {
     public String reqvaladd(@PathVariable String txnId, @RequestBody String xml) throws CommonCodeValidationException {
         System.out.println("==========================================");
         System.out.println("[IMPS] REQUEST FROM NPCI (HTTP)");
+        System.out.println("IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("Message Type: ReqValAdd | TxnId: " + txnId + " | Format: XML");
         System.out.println("==========================================");
         System.out.println(xml);
@@ -138,6 +146,7 @@ public class ImpsController {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("========== [IMPS] Switch → IMPS | REQ received | ReqPay ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ received from: Switch");
         System.out.println("  TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes | Format: ISO");
         System.out.println("  ---------- ISO 8583 ----------");
@@ -146,6 +155,7 @@ public class ImpsController {
         byte[] respIso = reqPayService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
             System.out.println("========== [IMPS] IMPS → Switch | RESP sent | RespPay ==========");
+            System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
             System.out.println("  RESP sent to: Switch");
             System.out.println("  TxnId: " + txnId + " | Length: " + respIso.length + " bytes | Format: ISO");
             System.out.println("  ---------- ISO 8583 ----------");
@@ -160,11 +170,13 @@ public class ImpsController {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("========== [IMPS] Switch → IMPS | REQ received | ReqChkTxn ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ received from: Switch | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("  ---------- ISO 8583 ----------\n" + formatIsoForConsole(isoBytes));
         byte[] respIso = reqChkTxnService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
             System.out.println("========== [IMPS] IMPS → Switch | RESP sent | RespChkTxn ==========");
+            System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
             System.out.println("  RESP sent to: Switch | TxnId: " + txnId + " | Length: " + respIso.length + " bytes\n" + formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -175,10 +187,12 @@ public class ImpsController {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("========== [IMPS] Switch → IMPS | REQ received | ReqHbt ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ received from: Switch | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes\n" + formatIsoForConsole(isoBytes));
         byte[] respIso = reqHbtService.processFromSwitch(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
             System.out.println("========== [IMPS] IMPS → Switch | RESP sent | RespHbt ==========");
+            System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
             System.out.println("  RESP sent to: Switch | TxnId: " + txnId + " | Length: " + respIso.length + " bytes\n" + formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(respIso != null ? respIso : new byte[0]);
@@ -189,12 +203,14 @@ public class ImpsController {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("========== [IMPS] Switch → IMPS | REQ received | ReqListAccPvd ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ received from: Switch | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("  ---------- ISO 8583 ----------\n" + formatIsoForConsole(isoBytes));
         log.info("[IMPS] Switch → IMPS | REQ | ReqListAccPvd | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
         byte[] respIso = reqListAccPvdService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
             System.out.println("========== [IMPS] IMPS → Switch | RESP sent | RespListAccPvd ==========");
+            System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
             System.out.println("  RESP sent to: Switch | TxnId: " + txnId + " | Length: " + respIso.length + " bytes\n" + formatIsoForConsole(respIso));
             log.info("[IMPS] IMPS → Switch | RESP | RespListAccPvd | TxnId: {} | Length: {} bytes", txnId, respIso.length);
         }
@@ -206,11 +222,13 @@ public class ImpsController {
         if (isoBytes == null || isoBytes.length == 0)
             return ResponseEntity.badRequest().contentType(MediaType.TEXT_PLAIN).body(ISO_BODY_REQUIRED.getBytes(StandardCharsets.UTF_8));
         System.out.println("========== [IMPS] Switch → IMPS | REQ received | ReqValAdd ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ received from: Switch | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("  ---------- ISO 8583 ----------\n" + formatIsoForConsole(isoBytes));
         byte[] respIso = reqValAddService.processFromSwitchSync(isoBytes, txnId);
         if (respIso != null && respIso.length > 0) {
             System.out.println("========== [IMPS] IMPS → Switch | RESP sent | RespValAdd ==========");
+            System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
             System.out.println("  RESP sent to: Switch | TxnId: " + txnId + " | Length: " + respIso.length + " bytes\n" + formatIsoForConsole(respIso));
         }
         return ResponseEntity.ok(orIsoAck(respIso, isoBytes));
@@ -226,6 +244,7 @@ public class ImpsController {
     @PostMapping(value = "/resppay/{txnId}", consumes = MediaType.APPLICATION_OCTET_STREAM_VALUE, produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public byte[] resppay(@PathVariable String txnId, @RequestBody byte[] isoBytes) {
         System.out.println("========== [IMPS] Switch → IMPS | RESP received | RespPay ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  RESP received from: Switch | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("  ---------- ISO 8583 ----------");
         System.out.println(formatIsoForConsole(isoBytes));

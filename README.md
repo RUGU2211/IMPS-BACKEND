@@ -2,6 +2,12 @@
 
 Hitachi IMPS project: IMPS Backend, Mock Switch, and NPCI Mock Client.
 
+## Requirements
+
+- **Java 17 only** (all modules use Java 17; do not use Java 21).
+- Maven 3.6+
+- PostgreSQL (for Imps-backend and mock_switch)
+
 ## Structure
 
 - **Imps-backend** – IMPS backend (NPCI XML ↔ Switch ISO 8583), HTTP 8081, Socket 9083. All APIs under `/imps`. Only IMPS writes to `transaction` and `message_audit_log` in imps_db.

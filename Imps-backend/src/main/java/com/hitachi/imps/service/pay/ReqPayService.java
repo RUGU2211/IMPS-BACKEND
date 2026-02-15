@@ -22,6 +22,7 @@ import com.hitachi.imps.service.iso.XmlUtil;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.validation.InstitutionValidationService;
 import com.hitachi.imps.exception.ReqPayValidationException;
+import com.hitachi.imps.config.ImpsServerDisplayInfo;
 
 /**
  * ReqPay: single service for both NPCI→IMPS (XML) and Switch→IMPS (ISO).
@@ -46,6 +47,7 @@ public class ReqPayService {
     @Autowired private InstitutionValidationService institutionValidationService;
     @Autowired private SwitchAddressResolver switchAddressResolver;
     @Autowired private ReqPayValidationService reqPayValidationService;
+    @Autowired private ImpsServerDisplayInfo impsServerDisplay;
 
     // ----- NPCI → IMPS (XML): receive XML, convert to ISO, send to Switch -----
     @Async
@@ -216,6 +218,7 @@ public class ReqPayService {
         transactionService.markIsoSent(txn);
 
         System.out.println("========== [IMPS] IMPS → NPCI | REQ sent | ReqPay (XML) ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  REQ sent to: NPCI | TxnId: " + txnId);
         String respXml;
         long tNpci = System.currentTimeMillis();
@@ -232,6 +235,7 @@ public class ReqPayService {
         }
         long npciRoundtripMs = System.currentTimeMillis() - tNpci;
         System.out.println("========== [IMPS] NPCI → IMPS | RESP received | RespPay (XML) ==========");
+        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
         System.out.println("  RESP received from: NPCI | TxnId: " + txnId + " | connection will close");
         System.out.println("========= PERFORMANCE =========");
         System.out.println("NPCI Roundtrip: " + npciRoundtripMs + "ms");
