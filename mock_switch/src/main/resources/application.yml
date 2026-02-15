@@ -86,7 +86,7 @@ socket:
     port: 9084             # TCP port (used when ssl-enabled: false)
     ssl-port: 9444         # SSL/TLS port (used when ssl-enabled: true)
   ssl:
-    key-store: file:../certs/switch-keystore.jks
+    key-store: file:${user.dir}/../certs/switch-keystore.jks
     key-store-password: IMPS-Backend
 
 # ===========================================
@@ -113,7 +113,7 @@ server:
   port: 8082
   ssl:
     enabled: true
-    key-store: file:../certs/switch-keystore.jks
+    key-store: file:${user.dir}/../certs/switch-keystore.jks
     key-store-password: IMPS-Backend
     key-store-type: PKCS12
     key-alias: switch

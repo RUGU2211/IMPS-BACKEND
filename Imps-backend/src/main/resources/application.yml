@@ -66,7 +66,7 @@ npci:
     host: 192.168.1.38
     port: 9445
     ssl-enabled: true
-    trust-store: file:E:/Hitachi_Project/certs/imps-truststore.jks
+    trust-store: file:${user.dir}/../certs/imps-truststore.jks
     trust-store-password: IMPS-Backend
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
@@ -91,7 +91,7 @@ routing:
       host: localhost
       port: 9084
       ssl-enabled: true
-      trust-store: file:E:/Hitachi_Project/certs/switch-truststore.jks
+      trust-store: file:${user.dir}/../certs/switch-truststore.jks
       trust-store-password: IMPS-Backend
     rest:
       enabled: false
@@ -105,10 +105,10 @@ routing:
 # ===========================================
 ssl:
   enabled: true
-  key-store: file:E:/Hitachi_Project/certs/imps-keystore.jks
+  key-store: file:${user.dir}/../certs/imps-keystore.jks
   key-store-password: IMPS-Backend
   key-alias: imps
-  trust-store: file:E:/Hitachi_Project/certs/imps-truststore.jks
+  trust-store: file:${user.dir}/../certs/imps-truststore.jks
   trust-store-password: IMPS-Backend
   client-auth: none
 
@@ -164,7 +164,7 @@ server:
   port: 8443
   ssl:
     enabled: true
-    key-store: file:E:/Hitachi_Project/certs/imps-keystore.jks
+    key-store: file:${user.dir}/../certs/imps-keystore.jks
     key-store-password: IMPS-Backend
     key-store-type: PKCS12
     key-alias: imps

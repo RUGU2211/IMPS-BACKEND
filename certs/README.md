@@ -1,7 +1,14 @@
 # SSL/TLS Keystores for IMPS
 
-Run `generate-certs.bat` (Windows) or `generate-certs.sh` (Unix) to create self-signed keystores for local dev.
+**Run `generate-certs.bat` from project root before first run** – keystores are gitignored and must be generated locally.
 
-**Output:** `imps-keystore.jks`, `imps-truststore.jks`, `switch-keystore.jks`, `npci-keystore.jks`, `client-truststore.jks`, `switch-truststore.jks`, `npci-truststore.jks`
+```
+D:/IMPS-BACKEND/          (or E:/Hitachi_Project/)
+├── certs/                ← run certs\generate-certs.bat here
+├── Imps-backend/
+├── mock_npci/
+└── mock_switch/
+```
 
-**Config paths:** Use `file:certs/...` when running from project root, or `file:../certs/...` when running from a module (Imps-backend, mock_switch, mock_npci).
+**Output (PKCS12):** `imps-keystore.jks`, `switch-keystore.jks`, `npci-keystore.jks`, truststores.  
+**Config:** Uses `${user.dir}/../certs/` – run each app from its module dir (e.g. `cd mock_switch && mvn spring-boot:run`).

@@ -8,18 +8,19 @@ set -e
 cd "$(dirname "$0")"
 mkdir -p .
 
+# Use -storetype PKCS12 so application.yml key-store-type matches (avoids fallback to ~/.keystore)
 echo "Creating IMPS keystore..."
-keytool -genkeypair -alias imps -keyalg RSA -keysize 2048 -validity 365 \
+keytool -genkeypair -alias imps -keyalg RSA -keysize 2048 -validity 365 -storetype PKCS12 \
   -keystore imps-keystore.jks -storepass IMPS-Backend -keypass IMPS-Backend \
   -dname "CN=IMPS, OU=Dev, O=Hitachi, L=Mumbai, ST=MH, C=IN"
 
 echo "Creating Switch keystore..."
-keytool -genkeypair -alias switch -keyalg RSA -keysize 2048 -validity 365 \
+keytool -genkeypair -alias switch -keyalg RSA -keysize 2048 -validity 365 -storetype PKCS12 \
   -keystore switch-keystore.jks -storepass IMPS-Backend -keypass IMPS-Backend \
   -dname "CN=Switch, OU=Dev, O=Hitachi, L=Mumbai, ST=MH, C=IN"
 
 echo "Creating NPCI keystore..."
-keytool -genkeypair -alias npci -keyalg RSA -keysize 2048 -validity 365 \
+keytool -genkeypair -alias npci -keyalg RSA -keysize 2048 -validity 365 -storetype PKCS12 \
   -keystore npci-keystore.jks -storepass IMPS-Backend -keypass IMPS-Backend \
   -dname "CN=NPCI, OU=Dev, O=Hitachi, L=Mumbai, ST=MH, C=IN"
 
@@ -29,10 +30,10 @@ keytool -exportcert -alias switch -keystore switch-keystore.jks -file switch-pub
 keytool -exportcert -alias npci -keystore npci-keystore.jks -file npci-public.cer -storepass IMPS-Backend
 
 echo "Creating truststores..."
-keytool -importcert -alias imps -file imps-public.cer -keystore client-truststore.jks -storepass IMPS-Backend -noprompt
-keytool -importcert -alias switch -file switch-public.cer -keystore switch-truststore.jks -storepass IMPS-Backend -noprompt
-keytool -importcert -alias npci -file npci-public.cer -keystore npci-truststore.jks -storepass IMPS-Backend -noprompt
-keytool -importcert -alias npci -file npci-public.cer -keystore imps-truststore.jks -storepass IMPS-Backend -noprompt
+keytool -importcert -alias imps -file imps-public.cer -keystore client-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
+keytool -importcert -alias switch -file switch-public.cer -keystore switch-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
+keytool -importcert -alias npci -file npci-public.cer -keystore npci-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
+keytool -importcert -alias npci -file npci-public.cer -keystore imps-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
 
 echo "Done. Keystores created in $(pwd)"
 ls -la *.jks
