@@ -27,18 +27,16 @@
 # ===========================================
 # SERVER CONFIGURATION
 # ===========================================
-# Values are read from environment (set from .env; see docs/sample-env).
-# ===========================================
 server:
-  port: ${SERVER_PORT:8081}
+  port: 8081
 
 spring:
   application:
     name: Imps-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/imps_db}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    url: jdbc:postgresql://localhost:5432/imps_db
+    username: postgres
+    password: root
 
   jpa:
     hibernate:
@@ -65,11 +63,11 @@ spring:
 npci:
   compliant-flow: true
   socket:
-    host: ${NPCI_SOCKET_HOST:192.168.1.38}
-    port: ${NPCI_SOCKET_PORT:9445}
-    ssl-enabled: ${NPCI_SOCKET_SSL_ENABLED:true}
-    trust-store: ${NPCI_SOCKET_TRUST_STORE:file:E:/Hitachi_Project/certs/imps-truststore.jks}
-    trust-store-password: ${NPCI_SOCKET_TRUST_STORE_PASSWORD:IMPS-Backend}
+    host: 192.168.1.38
+    port: 9445
+    ssl-enabled: true
+    trust-store: file:E:/Hitachi_Project/certs/imps-truststore.jks
+    trust-store-password: IMPS-Backend
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
 
@@ -90,11 +88,11 @@ routing:
     base-url: http://localhost:8082
     socket:
       enabled: true
-      host: ${ROUTING_SWITCH_SOCKET_HOST:localhost}
-      port: ${ROUTING_SWITCH_SOCKET_PORT:9084}
-      ssl-enabled: ${ROUTING_SWITCH_SOCKET_SSL_ENABLED:true}
-      trust-store: ${ROUTING_SWITCH_SOCKET_TRUST_STORE:file:E:/Hitachi_Project/certs/switch-truststore.jks}
-      trust-store-password: ${ROUTING_SWITCH_SOCKET_TRUST_STORE_PASSWORD:IMPS-Backend}
+      host: localhost
+      port: 9084
+      ssl-enabled: true
+      trust-store: file:E:/Hitachi_Project/certs/switch-truststore.jks
+      trust-store-password: IMPS-Backend
     rest:
       enabled: false
 
@@ -107,11 +105,11 @@ routing:
 # ===========================================
 ssl:
   enabled: true
-  key-store: ${SSL_KEY_STORE:file:E:/Hitachi_Project/certs/imps-keystore.jks}
-  key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
+  key-store: file:E:/Hitachi_Project/certs/imps-keystore.jks
+  key-store-password: IMPS-Backend
   key-alias: imps
-  trust-store: ${SSL_TRUST_STORE:file:E:/Hitachi_Project/certs/imps-truststore.jks}
-  trust-store-password: ${SSL_TRUST_STORE_PASSWORD:IMPS-Backend}
+  trust-store: file:E:/Hitachi_Project/certs/imps-truststore.jks
+  trust-store-password: IMPS-Backend
   client-auth: none
 
 # ===========================================
@@ -141,7 +139,7 @@ socket:
 imps:
   api:
     version: "2.1"
-  org-id: ${IMPS_ORG_ID:BANK01}
+  org-id: BANK01
   heartbeat:
     switch-check-enabled: true           # true = periodically check switch connectivity
     switch-check-interval-ms: 180000    # Check every 3 minutes
@@ -166,8 +164,8 @@ server:
   port: 8443
   ssl:
     enabled: true
-    key-store: ${SSL_KEY_STORE:file:E:/Hitachi_Project/certs/imps-keystore.jks}
-    key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
+    key-store: file:E:/Hitachi_Project/certs/imps-keystore.jks
+    key-store-password: IMPS-Backend
     key-store-type: JKS
     key-alias: imps
 
@@ -177,3 +175,29 @@ routing:
     base-url: https://localhost:8445
   switch:
     base-url: https://localhost:8082
+
+# ===========================================
+# PROFILE: docker – cert paths for container
+# ===========================================
+# Use: java -Dspring.profiles.active=docker -jar app.jar
+# Mount certs: -v ./certs:/app/certs
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+ssl:
+  key-store: file:/app/certs/imps-keystore.jks
+  trust-store: file:/app/certs/imps-truststore.jks
+npci:
+  socket:
+    trust-store: file:/app/certs/imps-truststore.jks
+routing:
+  switch:
+    socket:
+      trust-store: file:/app/certs/switch-truststore.jks
+# When ssl profile is also active (docker,ssl)
+server:
+  ssl:
+    key-store: file:/app/certs/imps-keystore.jks
+    trust-store: file:/app/certs/imps-truststore.jks

@@ -25,13 +25,13 @@ WORKDIR /app
 # Copy the built JAR from builder
 COPY --from=builder /build/app.jar app.jar
 
-# TLS/SSL: use /app/certs (mount your certs: -v ./certs:/app/certs)
+# TLS/SSL: mount certs at /app/certs: docker run -v ./certs:/app/certs ...
+# Uses spring.profiles.active=docker for /app/certs paths
 RUN mkdir -p /app/certs
-ENV SOCKET_SSL_KEY_STORE=file:/app/certs/switch-keystore.jks
 
 # Expose HTTP, TCP socket, and TLS/SSL ports (application.yml)
 # HTTP: 8082 | Socket TCP: 9084 | Socket TLS: 9444
 EXPOSE 8082 9084 9444
 
-# Run the application (TCP + TLS/SSL enabled via config)
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Run the application (docker profile = /app/certs paths)
+ENTRYPOINT ["java", "-Dspring.profiles.active=docker", "-jar", "app.jar"]

@@ -23,10 +23,8 @@
 # ===========================================
 # SERVER CONFIGURATION
 # ===========================================
-# Values are read from environment (set from .env; see docs/sample-env).
-# ===========================================
 server:
-  port: ${SERVER_PORT:8082}
+  port: 8082
 
 # ===========================================
 # DATABASE CONFIGURATION
@@ -35,9 +33,9 @@ spring:
   application:
     name: mock-switch
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/switch_db}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    url: jdbc:postgresql://localhost:5432/switch_db
+    username: postgres
+    password: root
     hikari:
       housekeeping-run-interval: 10000  # 10s (avoids thread starvation when machine sleeps)
 
@@ -69,9 +67,9 @@ logging:
 #   - base-path: /imps → /imps/respvaladd/{txnId}
 # ===========================================
 imps:
-  imps_ip: ${IMPS_IMPS_IP:192.168.1.38}
-  imps_port: ${IMPS_IMPS_PORT:8081}
-  base-path: ${IMPS_BASE_PATH:/imps}
+  imps_ip: 192.168.1.38
+  imps_port: 8081
+  base-path: /imps
 
 # ===========================================
 # SOCKET SERVER CONFIGURATION
@@ -88,16 +86,16 @@ socket:
     port: 9084             # TCP port (used when ssl-enabled: false)
     ssl-port: 9444         # SSL/TLS port (used when ssl-enabled: true)
   ssl:
-    key-store: ${SOCKET_SSL_KEY_STORE:file:../certs/switch-keystore.jks}
-    key-store-password: ${SOCKET_SSL_KEY_STORE_PASSWORD:IMPS-Backend}
+    key-store: file:E:/Hitachi_Project/certs/switch-keystore.jks
+    key-store-password: IMPS-Backend
 
 # ===========================================
 # MOCK BEHAVIOUR CONFIGURATION
 # ===========================================
 mock:
   auto-respond: true
-  response-delay-ms: ${MOCK_RESPONSE_DELAY_MS:500}
-  default-result: ${MOCK_DEFAULT_RESULT:SUCCESS}
+  response-delay-ms: 500
+  default-result: SUCCESS
 
 # ===========================================
 # PROFILE: ssl – REST over HTTPS (Optional)
@@ -115,7 +113,24 @@ server:
   port: 8082
   ssl:
     enabled: true
-    key-store: ${SOCKET_SSL_KEY_STORE:file:../certs/switch-keystore.jks}
-    key-store-password: ${SOCKET_SSL_KEY_STORE_PASSWORD:IMPS-Backend}
+    key-store: file:E:/Hitachi_Project/certs/switch-keystore.jks
+    key-store-password: IMPS-Backend
     key-store-type: JKS
     key-alias: switch
+
+# ===========================================
+# PROFILE: docker – cert paths for container
+# ===========================================
+# Use: java -Dspring.profiles.active=docker -jar app.jar
+# Mount certs: -v ./certs:/app/certs
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+socket:
+  ssl:
+    key-store: file:/app/certs/switch-keystore.jks
+server:
+  ssl:
+    key-store: file:/app/certs/switch-keystore.jks

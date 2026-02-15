@@ -65,31 +65,24 @@ psql -U postgres -d switch_db -f sql/switch_full_schema.sql
 
 Test data in schemas matches [docs/specs/IMPS_Req_API_Bodies.md](docs/specs/IMPS_Req_API_Bodies.md) (Rugved, Chetan, Sajid, Madhav accounts; BANK01/BANK02/BANK03 institutions).
 
-## Environment variables
-
-**application.yml** in each project reads configuration from the **environment**. Each application has a **`.env`** file in its directory; see **[docs/sample-env](docs/sample-env)** for variable names and how to run with .env loaded.
-
-- **.env location:** `Imps-backend/.env`, `mock_switch/.env`, `mock_npci/.env`
-- Do not commit `.env` (it is in `.gitignore`).
-
 ## Run
 
-Load the `.env` file then start the app so **application.yml** picks up the values.
+Configuration is in **application.yml** (direct values). Edit paths in application.yml if your project location differs from `E:/Hitachi_Project`.
 
 **Linux / Mac (Bash):**
 
 ```bash
 # Terminal 1 – IMPS Backend
 cd Imps-backend
-set -a && source .env && set +a && mvn spring-boot:run
+mvn spring-boot:run
 
 # Terminal 2 – Mock Switch
 cd mock_switch
-set -a && source .env && set +a && mvn spring-boot:run
+mvn spring-boot:run
 
 # Terminal 3 – NPCI Mock (for compliant flow)
 cd mock_npci
-set -a && source .env && set +a && mvn spring-boot:run
+mvn spring-boot:run
 ```
 
 **Windows (PowerShell):**
@@ -97,15 +90,15 @@ set -a && source .env && set +a && mvn spring-boot:run
 ```powershell
 # Terminal 1 – IMPS Backend
 cd Imps-backend
-Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
+mvn spring-boot:run
 
 # Terminal 2 – Mock Switch
 cd mock_switch
-Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
+mvn spring-boot:run
 
 # Terminal 3 – NPCI Mock
 cd mock_npci
-Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process') } }; mvn spring-boot:run
+mvn spring-boot:run
 ```
 
 **HTTPS (ssl profile):** Add `-Dspring-boot.run.profiles=ssl` to the end of the `mvn spring-boot:run` command.
