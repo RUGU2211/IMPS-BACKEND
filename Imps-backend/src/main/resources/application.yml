@@ -166,7 +166,7 @@ server:
     enabled: true
     key-store: file:E:/Hitachi_Project/certs/imps-keystore.jks
     key-store-password: IMPS-Backend
-    key-store-type: JKS
+    key-store-type: PKCS12
     key-alias: imps
 
 # When ssl profile is active, IMPS calls Switch and NPCI mock over HTTPS

@@ -25,7 +25,7 @@ import org.springframework.context.annotation.Configuration;
 public class SslConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SslConfig.class);
-    private static final String DEFAULT_KEYSTORE_TYPE = "JKS";
+    private static final String DEFAULT_KEYSTORE_TYPE = "PKCS12";
     private static final String DEFAULT_PROTOCOL = "TLS";
 
     private boolean enabled = false;
@@ -85,14 +85,14 @@ public class SslConfig {
                                                 String keyStorePath, String keyStorePassword, String keyStoreType) throws Exception {
         TrustManagerFactory tmf = null;
         if (trustStorePath != null && !trustStorePath.isBlank()) {
-            KeyStore ts = loadKeystore(trustStorePath, trustStorePassword, "JKS");
+            KeyStore ts = loadKeystore(trustStorePath, trustStorePassword, "PKCS12");
             tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(ts);
         }
 
         KeyManagerFactory kmf = null;
         if (keyStorePath != null && !keyStorePath.isBlank() && keyStorePassword != null) {
-            KeyStore ks = loadKeystore(keyStorePath, keyStorePassword, keyStoreType != null ? keyStoreType : "JKS");
+            KeyStore ks = loadKeystore(keyStorePath, keyStorePassword, keyStoreType != null ? keyStoreType : "PKCS12");
             kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(ks, keyStorePassword.toCharArray());
         }

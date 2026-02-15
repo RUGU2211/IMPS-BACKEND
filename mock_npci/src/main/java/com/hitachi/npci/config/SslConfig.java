@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Configuration;
 public class SslConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SslConfig.class);
-    private static final String DEFAULT_KEYSTORE_TYPE = "JKS";
+    private static final String DEFAULT_KEYSTORE_TYPE = "PKCS12";
     private static final String DEFAULT_PROTOCOL = "TLS";
 
     private String keyStore = "file:../certs/npci-keystore.jks";

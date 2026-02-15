@@ -26,10 +26,10 @@ import org.springframework.context.annotation.Configuration;
 public class SslConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SslConfig.class);
-    private static final String DEFAULT_KEYSTORE_TYPE = "JKS";
+    private static final String DEFAULT_KEYSTORE_TYPE = "PKCS12";
     private static final String DEFAULT_PROTOCOL = "TLS";
 
-    private String keyStore = "file:E:/Hitachi_Project/certs/switch-keystore.jks";
+    private String keyStore = "file:../certs/switch-keystore.jks";
     private String keyStorePassword = "IMPS-Backend";
     private String keyStoreType = DEFAULT_KEYSTORE_TYPE;
     private String keyAlias = "switch";

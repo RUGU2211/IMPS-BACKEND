@@ -50,7 +50,7 @@ public class NpciSocketClient {
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
                     sock.getTrustStore(), sock.getTrustStorePassword(),
-                    sock.getKeyStore(), sock.getKeyStorePassword(), "JKS");
+                    sock.getKeyStore(), sock.getKeyStorePassword(), "PKCS12");
                 SSLSocket sslSocket = (SSLSocket) ctx.getSocketFactory().createSocket();
                 sslSocket.connect(new InetSocketAddress(host, port), connectTimeout);
                 sslSocket.startHandshake();

@@ -44,7 +44,7 @@ server:
     enabled: true
     key-store: file:E:/Hitachi_Project/certs/npci-keystore.jks
     key-store-password: IMPS-Backend
-    key-store-type: JKS
+    key-store-type: PKCS12
     key-alias: npci
 
 # ===========================================

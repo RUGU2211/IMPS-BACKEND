@@ -52,7 +52,7 @@ public class SocketSwitchClient implements ISwitchClient {
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
                     sockConfig.getTrustStore(), sockConfig.getTrustStorePassword(),
-                    sockConfig.getKeyStore(), sockConfig.getKeyStorePassword(), "JKS");
+                    sockConfig.getKeyStore(), sockConfig.getKeyStorePassword(), "PKCS12");
                 SSLSocket ssl = (SSLSocket) ctx.getSocketFactory().createSocket();
                 ssl.connect(new InetSocketAddress(host, port), 10000);
                 ssl.startHandshake();
