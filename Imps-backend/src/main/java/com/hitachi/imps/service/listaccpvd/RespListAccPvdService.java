@@ -5,7 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.service.TransactionService;
@@ -21,7 +21,7 @@ public class RespListAccPvdService {
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private IsoToXmlConverter isoToXmlConverter;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -66,8 +66,8 @@ public class RespListAccPvdService {
         auditService.saveRaw(txnId, "NPCI_RESPLISTACCPVD_XML_OUT", xml);
         if (pathTxnId != null && pendingSocketStore.completePending(pathTxnId, xml)) return;
         try {
-            if (pathTxnId != null && !pathTxnId.isBlank()) npciMockClient.sendRespListAccPvd(xml, pathTxnId);
-            else npciMockClient.sendRespListAccPvd(xml);
-        } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            if (pathTxnId != null && !pathTxnId.isBlank()) npciRestClient.sendRespListAccPvd(xml, pathTxnId);
+            else npciRestClient.sendRespListAccPvd(xml);
+        } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
     }
 }

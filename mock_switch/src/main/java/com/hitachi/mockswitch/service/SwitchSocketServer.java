@@ -21,6 +21,7 @@ import org.springframework.stereotype.Component;
 import com.hitachi.mockswitch.config.SocketConfig;
 import com.hitachi.mockswitch.config.SslConfig;
 import com.hitachi.mockswitch.iso.MockIsoPackager;
+import com.hitachi.mockswitch.util.Iso8583PrettyFormatter;
 
 /**
  * TCP server for IMPS. Listens on socket.server.port.
@@ -91,12 +92,13 @@ public class SwitchSocketServer {
     }
 
     private void handleConnection(Socket socket) {
-        String clientAddr = socket.getRemoteSocketAddress().toString();
+        String clientHost = socket.getInetAddress() != null ? socket.getInetAddress().getHostAddress() : "?";
+        int clientPort = socket.getPort();
+        String actualAddress = clientHost + ":" + clientPort;
         String protocol = socket instanceof javax.net.ssl.SSLSocket ? "SSL/TLS" : "TCP";
-        log.info("[MOCK_SWITCH] IMPS socket connected: {} ({})", clientAddr, protocol);
-        System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] INCOMING CONNECTION FROM IMPS");
-        System.out.println("Protocol: " + protocol + " | Address: " + clientAddr);
+        log.info("[SWITCH] IMPS socket connected: {} ({})", actualAddress, protocol);
+        System.out.println("========== [SWITCH] IMPS → Switch (Socket) | Incoming connection ==========");
+        System.out.println("  Protocol: " + protocol + " | Remote address: " + actualAddress);
         System.out.println("==========================================");
         try (DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
@@ -111,44 +113,49 @@ public class SwitchSocketServer {
                 String isoDisplay = formatIsoForConsole(isoBytes);
                 String txnId = extractTxnId(isoBytes);
                 String msgType = detectMessageType(isoBytes);
-                log.info("[MOCK_SWITCH] ========== REQUEST FROM IMPS (SOCKET) ==========");
-                log.info("[MOCK_SWITCH] Message Type: {} | TxnId: {} | Length: {} bytes", msgType, txnId, length);
-                log.info("[MOCK_SWITCH] ISO received from IMPS:\n{}", isoDisplay);
-                System.out.println("==========================================");
-                System.out.println("[MOCK_SWITCH] REQUEST FROM IMPS (SOCKET)");
-                System.out.println("Message Type: " + msgType + " | TxnId: " + txnId + " | Length: " + length + " bytes");
-                System.out.println("==========================================");
+                log.info("[SWITCH] ========== REQUEST FROM IMPS (SOCKET) ==========");
+                log.info("[SWITCH] Message Type: {} | TxnId: {} | Length: {} bytes", msgType, txnId, length);
+                log.info("[SWITCH] ISO received from IMPS:\n{}", isoDisplay);
+                System.out.println("========== [SWITCH] IMPS → Switch | REQ received (Socket) | " + msgType + " ==========");
+                System.out.println("  REQ received from: IMPS at " + actualAddress);
+                System.out.println("  TxnId: " + txnId + " | Length: " + length + " bytes");
+                System.out.println("  ---------- ISO 8583 ----------");
                 System.out.println(isoDisplay);
                 byte[] respIso = processIso(isoBytes, txnId);
                 if (respIso != null) {
                     String respDisplay = formatIsoForConsole(respIso);
                     String respMsgType = detectMessageType(respIso);
-                    log.info("[MOCK_SWITCH] ========== RESPONSE TO IMPS (SOCKET) ==========");
-                    log.info("[MOCK_SWITCH] Message Type: {} | TxnId: {} | Length: {} bytes", respMsgType, txnId, respIso.length);
-                    log.info("[MOCK_SWITCH] ISO response sent to IMPS:\n{}", respDisplay);
-                    System.out.println("==========================================");
-                    System.out.println("[MOCK_SWITCH] RESPONSE TO IMPS (SOCKET)");
-                    System.out.println("Message Type: " + respMsgType + " | TxnId: " + txnId + " | Length: " + respIso.length + " bytes");
-                    System.out.println("==========================================");
+                    log.info("[SWITCH] ========== RESPONSE TO IMPS (SOCKET) ==========");
+                    log.info("[SWITCH] Message Type: {} | TxnId: {} | Length: {} bytes", respMsgType, txnId, respIso.length);
+                    log.info("[SWITCH] ISO response sent to IMPS:\n{}", respDisplay);
+                    System.out.println("========== [SWITCH] Switch → IMPS | RESP sent (Socket) | " + respMsgType + " ==========");
+                    System.out.println("  RESP sent to: IMPS at " + actualAddress);
+                    System.out.println("  TxnId: " + txnId + " | Length: " + respIso.length + " bytes");
+                    System.out.println("  ---------- ISO 8583 ----------");
                     System.out.println(respDisplay);
                     out.writeInt(respIso.length);
                     out.write(respIso);
                     out.flush();
                 } else {
-                    log.warn("[MOCK_SWITCH] No response generated for ISO from {}", clientAddr);
-                    System.out.println("[MOCK_SWITCH] WARNING: No response generated for request from " + clientAddr);
+                    log.warn("[SWITCH] No response generated for ISO from {}", actualAddress);
+                    System.out.println("[SWITCH] WARNING: No response generated for request from " + actualAddress);
                     break;
                 }
             }
         } catch (IOException e) {
-            log.info("[MOCK_SWITCH] IMPS socket closed: {} ({})", clientAddr, e.getMessage() != null ? e.getMessage() : "no data or connection reset");
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("reset") || msg.contains("aborted") || msg.contains("closed")) {
+                log.info("[SWITCH] IMPS connection closed: {} (normal – response sent, client disconnected)", actualAddress);
+            } else {
+                log.info("[SWITCH] IMPS socket closed: {} ({})", actualAddress, msg);
+            }
         } catch (Exception e) {
-            log.error("[MOCK_SWITCH] Switch socket error: {}", clientAddr, e);
+            log.error("[SWITCH] Switch socket error: {}", actualAddress, e);
         } finally {
             try {
                 socket.close();
             } catch (IOException e) {
-                log.debug("[MOCK_SWITCH] Error closing socket: {}", e.getMessage());
+                log.debug("[SWITCH] Error closing socket: {}", e.getMessage());
             }
         }
     }
@@ -158,14 +165,7 @@ public class SwitchSocketServer {
             ISOMsg iso = new ISOMsg();
             iso.setPackager(new MockIsoPackager());
             iso.unpack(isoBytes);
-            StringBuilder sb = new StringBuilder();
-            sb.append("MTI=").append(iso.getMTI()).append("\n");
-            for (int i = 1; i <= 128; i++) {
-                if (iso.hasField(i)) {
-                    sb.append("DE").append(i).append("=").append(iso.getString(i)).append("\n");
-                }
-            }
-            return sb.toString();
+            return Iso8583PrettyFormatter.format(iso);
         } catch (ISOException e) {
             return "ISO parse failed: " + e.getMessage();
         }
@@ -228,10 +228,10 @@ public class SwitchSocketServer {
                 if (de3.startsWith("31")) return responseService.buildRespValAddSync(isoBytes, txnId);
                 if (de3.startsWith("32")) return responseService.buildRespListAccPvdSync(isoBytes, txnId);
             }
-            log.warn("[MOCK_SWITCH] Unknown ISO type: MTI={} DE3={}", mti, de3);
+            log.warn("[SWITCH] Unknown ISO type: MTI={} DE3={}", mti, de3);
             return null;
         } catch (Exception e) {
-            log.error("[MOCK_SWITCH] processIso error", e);
+            log.error("[SWITCH] processIso error", e);
             return null;
         }
     }

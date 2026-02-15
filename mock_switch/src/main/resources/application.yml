@@ -1,8 +1,13 @@
 # ===========================================
 # MOCK SWITCH – Application Configuration
 # ===========================================
-# HTTP (default): server.port 8082
-# HTTPS: run with --spring.profiles.active=ssl → server.port 8082 (HTTPS)
+#
+# CONNECTION PORTS (simple reference)
+# -----------------------------------
+#   IMPS:    HTTP 8081   HTTPS 8443   Socket TCP 9083   Socket TLS 9443
+#   Switch:  HTTP 8082   HTTPS 8444   TCP 9084          TLS 9444
+#   NPCI:    HTTP 8083   HTTPS 8445   TCP 9085          TLS 9445
+# Default: socket uses TLS (ssl-enabled: true). Run from Parent/mock_switch/
 #
 # CONNECTION FLOW EXPLANATION:
 # ===========================================
@@ -32,6 +37,9 @@ server:
 spring:
   application:
     name: mock-switch
+  # Default profile: ssl (HTTPS). Use -Dspring.profiles.active= (empty) or "default" for HTTP only.
+  profiles:
+    active: ssl
   datasource:
     url: jdbc:postgresql://localhost:5432/switch_db
     username: postgres
@@ -59,16 +67,18 @@ logging:
 # ===========================================
 # IMPS BACKEND ROUTING CONFIGURATION
 # ===========================================
-# When Switch needs to send responses back to IMPS Backend
+# INDEPENDENCE: Set imps.enabled: false to run mock_switch without IMPS.
+# When false: socket and REST still work; only outbound forward to IMPS is skipped (logged).
+# Proxy (/switch/proxy/imps/*) returns 503 when imps.enabled: false.
+# When true: Switch sends responses to IMPS at imps_ip:imps_port (or imps_ssl_port when ssl).
 # Endpoint path is built dynamically: base-path / resptype / txnId
-# Examples:
-#   - base-path: /imps → /imps/resppay/{txnId}
-#   - base-path: /imps → /imps/respchktxn/{txnId}
-#   - base-path: /imps → /imps/respvaladd/{txnId}
 # ===========================================
 imps:
+  enabled: true               # false = run standalone (no outbound calls to IMPS)
   imps_ip: 192.168.1.38
   imps_port: 8081
+  imps_ssl_port: 8443         # IMPS HTTPS when ssl profile; used by proxy
+  imps_use_ssl: false         # true in ssl profile when IMPS runs with ssl
   base-path: /imps
 
 # ===========================================
@@ -98,19 +108,20 @@ mock:
   default-result: SUCCESS
 
 # ===========================================
-# PROFILE: ssl – REST over HTTPS (Optional)
+# PROFILE: ssl – REST over HTTPS (port 8444)
 # ===========================================
-# Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-# HTTPS REST on port 8082
-# IMPS POST to https://localhost:8082/imps/{resptype}/{txnId}
+# ssl is default in application.yml; use -Dspring.profiles.active=default for HTTP
+# HTTPS REST on port 8444. IMPS POST to https://host:8444/imps/{resptype}/{txnId}
 # ===========================================
 ---
 spring:
   config:
     activate:
       on-profile: ssl
+imps:
+  imps_use_ssl: true          # Proxy to IMPS over HTTPS (8443)
 server:
-  port: 8082
+  port: 8444
   ssl:
     enabled: true
     key-store: file:${user.dir}/../certs/switch-keystore.jks

@@ -67,11 +67,11 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPPAY");
         String isoDisplay = responseService.formatIsoForConsole(isoBytes);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] RESPONSE FROM IMPS (HTTP)");
         System.out.println("Message Type: RespPay | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
-        System.out.println("[MOCK_SWITCH] Forwarding RespPay to IMPS Backend");
+        System.out.println("[SWITCH] Forwarding RespPay to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPPAY");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resppay", txnId), "RESPPAY");
         return buildAck("RespPay");
@@ -82,11 +82,11 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPCHKTXN");
         String isoDisplay = responseService.formatIsoForConsole(isoBytes);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] RESPONSE FROM IMPS (HTTP)");
         System.out.println("Message Type: RespChkTxn | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
-        System.out.println("[MOCK_SWITCH] Forwarding RespChkTxn to IMPS Backend");
+        System.out.println("[SWITCH] Forwarding RespChkTxn to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPCHKTXN");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respchktxn", txnId), "RESPCHKTXN");
         return buildAck("RespChkTxn");
@@ -99,11 +99,11 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPVALADD");
         String isoDisplay = responseService.formatIsoForConsole(isoBytes);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] RESPONSE FROM IMPS (HTTP)");
         System.out.println("Message Type: RespValAdd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
-        System.out.println("[MOCK_SWITCH] Forwarding RespValAdd to IMPS Backend");
+        System.out.println("[SWITCH] Forwarding RespValAdd to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPVALADD");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("respvaladd", txnId), "RESPVALADD");
         return buildAck("RespValAdd");
@@ -114,11 +114,11 @@ public class MockSwitchController {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "RESPLISTACCPVD");
         String isoDisplay = responseService.formatIsoForConsole(isoBytes);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] RESPONSE FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] RESPONSE FROM IMPS (HTTP)");
         System.out.println("Message Type: RespListAccPvd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
-        System.out.println("[MOCK_SWITCH] Forwarding RespListAccPvd to IMPS Backend");
+        System.out.println("[SWITCH] Forwarding RespListAccPvd to IMPS Backend");
         responseService.logIsoMessage(isoBytes, "RESPLISTACCPVD");
         responseService.forwardIsoToBackend(isoBytes, responseService.buildEndpointPath("resplistaccpvd", txnId), "RESPLISTACCPVD");
         return buildAck("RespListAccPvd");
@@ -129,7 +129,7 @@ public class MockSwitchController {
        =============================== */
     private String buildAck(String api) {
         String ts = java.time.OffsetDateTime.now().toString();
-        String msgId = "MOCK_" + System.currentTimeMillis();
+        String msgId = "SWITCH_" + System.currentTimeMillis();
         
         return """
             <?xml version="1.0" encoding="UTF-8"?>

@@ -112,6 +112,7 @@ public class RoutingConfig {
         private boolean enabled = false;
         private String host = "localhost";
         private int port = 9084;
+        private int sslPort = 9444;
         private boolean sslEnabled = false;
         private String trustStore;
         private String trustStorePassword = "IMPS-Backend";
@@ -125,6 +126,8 @@ public class RoutingConfig {
         public void setHost(String host) { this.host = host; }
         public int getPort() { return port; }
         public void setPort(int port) { this.port = port; }
+        public int getSslPort() { return sslPort; }
+        public void setSslPort(int sslPort) { this.sslPort = sslPort; }
         public boolean isSslEnabled() { return sslEnabled; }
         public void setSslEnabled(boolean sslEnabled) { this.sslEnabled = sslEnabled; }
         public String getTrustStore() { return trustStore; }

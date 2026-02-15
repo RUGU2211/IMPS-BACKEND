@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.client.switchclient.ISwitchClient;
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.converter.XmlToIsoConverter;
 import com.hitachi.imps.entity.TransactionEntity;
@@ -26,7 +26,7 @@ public class RespValAddService {
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private IsoToXmlConverter isoToXmlConverter;
     @Autowired private ISwitchClient switchClient;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -92,8 +92,8 @@ public class RespValAddService {
         String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : origTxnId;
         if (txnIdForNpci != null && pendingSocketStore.completePending(txnIdForNpci, xml)) return;
         try {
-            if (txnIdForNpci != null && !txnIdForNpci.isBlank()) npciMockClient.sendRespValAdd(xml, txnIdForNpci);
-            else npciMockClient.sendRespValAdd(xml);
-        } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            if (txnIdForNpci != null && !txnIdForNpci.isBlank()) npciRestClient.sendRespValAdd(xml, txnIdForNpci);
+            else npciRestClient.sendRespValAdd(xml);
+        } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
     }
 }

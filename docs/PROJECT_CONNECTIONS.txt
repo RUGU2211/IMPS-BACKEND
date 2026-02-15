@@ -1,0 +1,116 @@
+Project Connections
+
+
+Two databases: imps_db (IMPS Backend) and switch_db (Mock Switch).
+
+Ports and roles
+
+
+Service  HTTP Port  HTTPS Port  Socket TCP  Socket TLS  Role
+**Imps-backend**  8081  8443 (ssl, default)  9083  9443  NPCI XML ↔ Switch ISO; socket server; heartbeat; imps_db
+**mock_switch**  8082  8444 (ssl, default)  9084  9444  Mock Switch (ISO 8583); switch_db
+**mock_npci**  8083  8445 (ssl, default)  9085  9445  Mock NPCI (XML); stateless
+
+Connection matrix: Use HTTP (8081) or HTTPS (8443) for REST; use TCP (9083) or TLS (9443) for socket. Same pattern for Switch (9084/9444) and NPCI Mock (9085/9445). Postman: see POSTMAN.md (POSTMAN.txt). Socket testing: see socket/SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt) and TESTING_GUIDE.md (TESTING_GUIDE.txt).
+
+SSL/TLS: ssl profile is default in application.yml. Normal mvn spring-boot:run uses HTTPS (8443, 8444, 8445). For HTTP only, use -Dspring.profiles.active=default. When ssl is active, IMPS socket server listens on 9443; IMPS connects to NPCI on 9445 and Switch on 9444.
+
+Independence: mock_npci has no outbound dependency on IMPS. mock_switch can run standalone: set imps.enabled: false in application.yml to disable outbound calls to IMPS.
+
+Database: imps_db (PostgreSQL)
+
+
+- URL: jdbc:postgresql://localhost:5432/imps_db
+- Used by: Imps-backend only
+
+Tables
+
+
+Table  Purpose
+transaction  IMPS transaction state (INIT → ISO_SENT → SUCCESS/FAILED)
+message_audit_log  4-stage audit per flow (NPCI_*_XML_IN, SWITCH_*_ISO_OUT/IN, NPCI_*_XML_OUT). All stages use txnId.
+institution_master  IMPS validation (IFSC, routing, ListAccPvd). Columns: url, spoc_name, spoc_email, spoc_phone, last_modified_ts (auto-updated).
+account_type_mapping  Account type ↔ ISO code
+xml_path_req_pay  ReqPay XPath config
+response_xpath  Response XPath config
+
+IMPS-only access: Only Imps-backend writes to transaction and message_audit_log. mock_switch and mock_npci do not use imps_db.
+
+Full schema: run sql/imps_full_schema.sql from project root.
+
+Database: switch_db (PostgreSQL)
+
+
+- URL: jdbc:postgresql://localhost:5432/switch_db
+- Used by: mock_switch only
+
+Tables
+
+
+Table  Purpose
+account_master  ValAdd name enquiry; ReqPay debit/credit; balance updates. Matches [IMPS_Req_API_Bodies](specs/IMPS_Req_API_Bodies.txt) (Rugved, Chetan, Sajid, Madhav).
+
+Full schema: run sql/switch_full_schema.sql from project root. IFSC codes must match institution_master.ifsc_code in imps_db (HDFC0000001, ICIC0000001, SBIN0000001).
+
+Socket flow (default)
+
+
+Connection  Format  Plain Port  SSL Port
+**NPCI → IMPS**  [4 bytes][XML]  9083  9443
+**Switch → IMPS (reverse)**  [4 bytes][ISO]  9086  9446
+**IMPS → Switch**  [4 bytes][ISO]  9084  9444
+**IMPS → NPCI**  [4 bytes][XML]  9085  9445 (when `npci.compliant-flow: true`)
+
+Reverse flow (Switch → IMPS): Same connection pattern as NPCI→IMPS. Switch connects to IMPS on 9086 (TCP) or 9446 (TLS), sends [4-byte length big-endian][ISO], IMPS responds with [4 bytes][ISO]. Same flow for TCP/TLS as NPCI→IMPS.
+
+See socket/SOCKET_SSL_TLS.md (socket/SOCKET_SSL_TLS.txt) for SSL setup.
+
+npci.compliant-flow: true (default): NPCI-compliant socket flow.
+- Phase 1: NPCI → IMPS Req → IMPS ACK (same socket) → NPCI closes. Client reads once (ACK).
+- Phase 3: IMPS opens NEW connection to mock_npci:9085 → Resp → mock_npci ACK → IMPS closes.
+
+npci.compliant-flow: false: Legacy same-connection flow. Client reads twice (ACK, then Resp).
+
+Message types: ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd (and Resp*). See socket/SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt).
+
+Connection types (TCP, TLS, HTTP, HTTPS)
+
+
+Type  IMPS (NPCI)  IMPS (Switch reverse)  How to use
+**HTTP**  Port 8081  8081  Postman / curl: `http://localhost:8081/imps/...`
+**HTTPS**  Port 8443  8443  Default profile (ssl); Postman: `https://localhost:8443`
+**TCP (socket)**  Port 9083 [4 bytes][XML]  Port 9086 [4 bytes][ISO]  Same framing; NPCI uses XML, Switch uses ISO. See SOCKET_GUIDE.md
+**TLS (socket)**  Port 9443  Port 9446  Same as TCP but with TLS when `ssl.enabled: true`
+
+Reverse flow (Switch → IMPS): Same connection pattern as NPCI→IMPS—[4 bytes][ISO] on port 9086 (TCP) or 9446 (TLS). REST https://{ip}:{port}/imps/{reqtype}/{txn_id} with binary body is optional; socket is the primary connection type.
+
+HTTP flow (optional)
+
+
+```
+NPCI (mock 8083)  ←→  Imps-backend (8081)  ←→  Mock Switch (8082)
+     XML                    XML ↔ ISO                   ISO
+```
+
+- Imps-backend calls mock_npci at http://localhost:8083 (responses to NPCI).
+- Imps-backend calls mock_switch at http://localhost:8082 when REST mode (routing.switch.rest.enabled: true).
+- mock_switch calls Imps-backend at http://localhost:8081 for async responses (REST mode).
+- IMPS TCP pings each bank switch every 3 min; console shows UP/DOWN banks with contact details. No auto ReqHbt from NPCI or Switch. Manual ReqHbt (socket, HTTP, SSL) triggers full flow with DB logging.
+
+Run
+
+
+Config is in application.yml (direct values). Edit paths if your project location differs from E:/Hitachi_Project.
+
+- Linux/Mac: cd <app-dir> && mvn spring-boot:run
+- Windows PowerShell: cd <app-dir>; mvn spring-boot:run
+
+Default: ssl profile is active (HTTPS 8443, 8444, 8445). For HTTP only: -Dspring.profiles.active=default. See TESTING_GUIDE.md (TESTING_GUIDE.txt) for full run commands.
+
+Config summary
+
+
+- Imps-backend application.yml: socket.*, npci.compliant-flow, npci.socket.* (host, port), routing.switch.socket.*, routing.switch.rest.*, imps.*
+- mock_npci application.yml: socket.*
+- mock_switch application.yml: socket.*, imps.enabled, imps.imps_ip, imps.imps_port, mock.*
+- mock_npci application.yml: server port, socket port (no DB).

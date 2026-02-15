@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns2:RespListAccPvd xmlns:ns2="http://npci.org/upi/schema/">
+    <Head ver="2.0" ts="2026-01-25T23:45:00.000+05:30" orgId="SWITCH" msgId="{{msgId}}" prodType="IMPS"/>
+    <Txn type="ListAccPvd"/>
+    <List>
+        <AccPvd name="HDFC" nbin="HDFC" ifsc="HDFC0000001" status="ACTIVE"/>
+        <AccPvd name="ICICI" nbin="ICICI" ifsc="ICIC0000001" status="ACTIVE"/>
+    </List>
+</ns2:RespListAccPvd>

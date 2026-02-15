@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns2:RespPay xmlns:ns2="http://npci.org/upi/schema/">
+    <Head ver="2.0" ts="2026-01-25T10:35:00.000+05:30" orgId="SWITCH" msgId="{{msgId}}" prodType="IMPS"/>
+    <Txn id="{{txnId}}" note="Response" refId="" refUrl="" ts="2026-01-25T10:35:00.000+05:30" type="CREDIT" subType="PAY" initiationMode="API" refCategory="00"/>
+    <Resp reqMsgId="123456" result="SUCCESS">
+        <Ref type="PAYEE" seqNum="1" addr="1111222233334444@bank.ifsc.npci" settAmount="1000.00" orgAmount="1000.00" settCurrency="INR" approvalNum="APPR01" respCode="00" regName="Sajid Mulla" reversalRespCode="" acNum="1111222233334444" code="0000" IFSC="ICIC0000001" accType="SAVINGS"/>
+    </Resp>
+</ns2:RespPay>

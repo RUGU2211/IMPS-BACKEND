@@ -9,9 +9,13 @@ import org.springframework.web.client.RestTemplate;
 
 import com.hitachi.imps.config.RoutingConfig;
 
-/** Client for sending XML to NPCI Mock (REST). */
+/**
+ * REST client for sending XML to NPCI.
+ * Used when NPCI communicates with IMPS over HTTP/REST (e.g. ACK, request/response).
+ * Configure routing.npci.base-url to point to actual NPCI or mock; IMPS has no dependency on mock apps.
+ */
 @Component
-public class NpciMockClient {
+public class NpciRestClient {
 
     @Autowired
     private RoutingConfig routingConfig;
@@ -26,19 +30,20 @@ public class NpciMockClient {
             String response = restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
             return response;
         } catch (Exception e) {
-            System.err.println("NPCI MOCK CLIENT SEND FAILED [" + endpointKey + "]: " + e.getMessage());
+            System.err.println("NPCI REST SEND FAILED [" + endpointKey + "]: " + e.getMessage());
             return null;
         }
     }
 
-    public void sendAckToNpciMock(String ackXml) {
+    /** Send ACK to NPCI (REST). Used when NPCI sends request via HTTP and expects ACK at routing.npci.base-url. */
+    public void sendAck(String ackXml) {
         try {
             String url = routingConfig.getNpci().getFullUrl("ack");
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_XML);
             restTemplate.postForObject(url, new HttpEntity<>(ackXml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI MOCK: Send ACK failed: " + e.getMessage());
+            System.err.println("NPCI REST: Send ACK failed: " + e.getMessage());
         }
     }
 
@@ -55,7 +60,7 @@ public class NpciMockClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI MOCK SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            System.err.println("NPCI REST SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
             return null;
         }
     }
@@ -68,7 +73,7 @@ public class NpciMockClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI MOCK SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            System.err.println("NPCI REST SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
             return null;
         }
     }
@@ -91,7 +96,7 @@ public class NpciMockClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI MOCK SEND FAILED [reqhbt]: " + e.getMessage());
+            System.err.println("NPCI REST SEND FAILED [reqhbt]: " + e.getMessage());
             return null;
         }
     }

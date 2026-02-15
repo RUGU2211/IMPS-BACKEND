@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns2:RespValAdd xmlns:ns2="http://npci.org/upi/schema/">
+    <Head ver="2.0" ts="2026-01-25T14:50:00.000+05:30" orgId="SWITCH" msgId="{{msgId}}" prodType="IMPS"/>
+    <Txn id="{{txnId}}" note="Name Enquiry Response" type="NameEnq" ts="2026-01-25T14:50:00.000+05:30"/>
+    <Resp result="SUCCESS" respCode="00" regName="Sajid Mulla" acNum="1111222233334444" code="0000" IFSC="ICIC0000001"/>
+</ns2:RespValAdd>

@@ -33,7 +33,9 @@ echo "Creating truststores..."
 keytool -importcert -alias imps -file imps-public.cer -keystore client-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
 keytool -importcert -alias switch -file switch-public.cer -keystore switch-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
 keytool -importcert -alias npci -file npci-public.cer -keystore npci-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
+# imps-truststore: IMPS trusts NPCI (outbound) and Switch (inbound from Switch)
 keytool -importcert -alias npci -file npci-public.cer -keystore imps-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
+keytool -importcert -alias switch -file switch-public.cer -keystore imps-truststore.jks -storetype PKCS12 -storepass IMPS-Backend -noprompt
 
 echo "Done. Keystores created in $(pwd)"
 ls -la *.jks

@@ -12,12 +12,16 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @Value("${imps.org-id:BANK01}")
+    private String orgId;
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     /** Rule 020: Head ts = ISO with up to 3 fractional seconds. */
@@ -160,7 +164,7 @@ public class GlobalExceptionHandler {
         reqMsgId = RespPaySpec.exactLen(reqMsgId, RespPaySpec.RESP_REQMSGID_LEN, '0');
         String ts = OffsetDateTime.now().format(HEAD_TS_FORMAT);
         String txnId = RespPaySpec.exactLen("TXN" + System.currentTimeMillis(), RespPaySpec.TXN_ID_LEN, '0');
-        String orgId = RespPaySpec.truncate("BANK01", RespPaySpec.HEAD_ORGID_MAX);
+        String orgIdVal = RespPaySpec.truncate(orgId, RespPaySpec.HEAD_ORGID_MAX);
         String note = RespPaySpec.truncate("Failure", RespPaySpec.TXN_NOTE_MAX);
         String result = RespPaySpec.truncate("FAILURE", RespPaySpec.RESP_RESULT_MAX);
         errCode = RespPaySpec.truncate(errCode != null ? errCode : "96", RespPaySpec.RESP_ERRCODE_MAX);
@@ -172,6 +176,6 @@ public class GlobalExceptionHandler {
                     <ErrMsg>%s</ErrMsg>
                 </Resp>
             </ns2:RespPay>
-            """.formatted(ns, ts, orgId, msgId, RespPaySpec.PRODTYPE_FIXED, txnId, note, ts, reqMsgId, result, errCode, errMsg != null ? errMsg : "");
+            """.formatted(ns, ts, orgIdVal, msgId, RespPaySpec.PRODTYPE_FIXED, txnId, note, ts, reqMsgId, result, errCode, errMsg != null ? errMsg : "");
     }
 }

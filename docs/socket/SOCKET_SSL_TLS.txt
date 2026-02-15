@@ -1,0 +1,102 @@
+IMPS Socket – SSL/TLS Setup & Testing
+
+
+Purpose: Keytool commands, OpenSSL tests, and firewall rules for IMPS SSL/TLS sockets.  
+When: Use when ssl.enabled: true (NPCI → IMPS) or npci.socket.ssl-enabled: true / routing.switch.socket.ssl-enabled: true.
+
+Config: application.yml → ssl, npci.socket, routing.switch.socket. See IMPLEMENTATION_PLAN_SSL_TLS (../implementation/IMPLEMENTATION_PLAN_SSL_TLS.txt) for full implementation plan.
+
+Keystores: Run certs/generate-certs.bat (or generate-certs.sh) from project root to create keystores with password IMPS-Backend.
+
+---
+
+1. SSL Ports
+
+
+Connection  Plain Port  SSL Port
+NPCI → IMPS (NpciSocketServer)  9083  9443
+IMPS → Switch (SocketSwitchClient)  9084  9444
+IMPS → NPCI (NpciSocketClient)  9085  9445
+
+Configure socket.server.npci.ssl-port: 9443 (default) when ssl.enabled: true.
+
+---
+
+2. Keystore Setup (keytool)
+
+
+Use certs/generate-certs.bat (Windows) or certs/generate-certs.sh (Unix) from project root. It creates imps-keystore.jks, switch-keystore.jks, npci-keystore.jks and truststores with password IMPS-Backend.
+
+Manual keytool (if needed):
+
+2.1 Create IMPS Server Keystore (self-signed, dev)
+
+
+```bash
+mkdir -p certs
+keytool -genkeypair -alias imps -keyalg RSA -keysize 2048 -validity 365 \
+  -keystore certs/imps-keystore.jks -storepass IMPS-Backend -keypass IMPS-Backend \
+  -dname "CN=IMPS, OU=Dev, O=Hitachi, L=Mumbai, ST=MH, C=IN"
+```
+
+2.2 Export / Import (truststores)
+
+
+```bash
+keytool -exportcert -alias imps -keystore certs/imps-keystore.jks -file certs/imps-public.cer -storepass IMPS-Backend
+keytool -importcert -alias imps -file certs/imps-public.cer -keystore certs/client-truststore.jks -storepass IMPS-Backend -noprompt
+```
+
+---
+
+3. Path Conventions
+
+
+Config  Example  Notes
+`ssl.key-store`  `file:../certs/imps-keystore.jks`  When running from module dir
+`ssl.trust-store`  `file:../certs/imps-truststore.jks`  Same
+`npci.socket.trust-store`  `file:../certs/npci-truststore.jks`  For IMPS → NPCI
+`routing.switch.socket.trust-store`  `file:../certs/switch-truststore.jks`  For IMPS → Switch
+
+---
+
+4. OpenSSL Tests
+
+
+```bash
+openssl s_client -connect localhost:9443
+openssl s_client -connect localhost:9443 -showcerts
+```
+
+---
+
+5. Firewall Rules (Windows)
+
+
+```cmd
+netsh advfirewall firewall add rule name="IMPS SSL Socket" dir=in action=allow protocol=TCP localport=9443
+netsh advfirewall firewall add rule name="IMPS SSL Switch" dir=in action=allow protocol=TCP localport=9444
+netsh advfirewall firewall add rule name="IMPS SSL NPCI" dir=in action=allow protocol=TCP localport=9445
+```
+
+---
+
+6. Environment Matrix
+
+
+Environment  ssl.enabled  npci.socket.ssl-enabled  routing.switch.socket.ssl-enabled
+Local dev  false  false  false
+Bank UAT  true or false  true (if NPCI TLS)  true (bank TLS)
+NPCI UAT  **true (mTLS)**  **true**  Per bank
+PROD  **true (mTLS)**  **true**  **true**
+
+---
+
+7. Troubleshooting
+
+
+Issue  Fix
+`Keystore was tampered with, or password was incorrect`  Use password `IMPS-Backend`; regenerate with certs/generate-certs.bat
+`Classpath resource not found`  Use `file:../certs/...` when running from Imps-backend/mock_switch/mock_npci
+`Connection refused`  Ensure IMPS listens on 9443 when `ssl.enabled: true`
+`SSL handshake failure`  Ensure client truststore contains IMPS cert (one-way) or both trust each other (mTLS)

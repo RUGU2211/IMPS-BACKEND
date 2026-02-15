@@ -1,75 +1,81 @@
-# IMPS Socket – Testing & PowerShell APIs
+IMPS Socket – Testing & PowerShell APIs
+
 
 Test the IMPS NPCI socket with PowerShell only (no extra tools).  
-**XML format:** All bodies must follow [NPCI_IMPS_Message_Formats](../specs/NPCI_IMPS_Message_Formats.md).
+XML format: All bodies must follow NPCI_IMPS_Message_Formats (../specs/NPCI_IMPS_Message_Formats.txt).
 
-**npci.compliant-flow: true (default):** Read **once** (ACK only). Resp is sent by IMPS to mock_npci:9085 on a separate connection.  
-**npci.compliant-flow: false:** Read **twice** (ACK, then Resp on same socket).
-
----
-
-## Socket message types & ports
-
-| API | Switch required | Plain port | SSL port |
-|-----|-----------------|------------|----------|
-| ReqHbt | No | 9083 | 9443 |
-| ReqListAccPvd | No | 9083 | 9443 |
-| ReqPay | Yes (mock_switch) | 9083 | 9443 |
-| ReqChkTxn | Yes (mock_switch) | 9083 | 9443 |
-| ReqValAdd | Yes (mock_switch) | 9083 | 9443 |
-
-**Test from own PC:** `$HostParam='localhost'`. **From another PC:** `$HostParam='<IMPS server IP>'` (e.g. `192.168.1.38`).
-
-**ID format:** msgId and Txn id must be **35 chars** (3 BPC + 32), e.g. `HBT00000000000000000000000000000001`.
+npci.compliant-flow: true (default): Read once (ACK only). Resp is sent by IMPS to mock_npci:9085 on a separate connection.  
+npci.compliant-flow: false: Read twice (ACK, then Resp on same socket).
 
 ---
 
-## Prerequisites
+Socket message types & ports
 
-1. Start **IMPS Backend** (socket enabled, port 9083): `cd Imps-backend && mvn spring-boot:run` (see [../TESTING_GUIDE.md](../TESTING_GUIDE.md) for full commands).
-2. For ReqPay/ReqChkTxn/ReqValAdd: start **mock_switch** (port 9084): `cd mock_switch && mvn spring-boot:run`.
-3. For **npci.compliant-flow: true**: start **mock_npci** (port 9085): `cd mock_npci && mvn spring-boot:run` so IMPS can send Resp outbound.
-4. REST optional: set `routing.switch.rest.enabled: true` in IMPS for HTTP instead of socket
+
+API  Switch required  Plain port  SSL port
+ReqHbt  No  9083  9443
+ReqListAccPvd  No  9083  9443
+ReqPay  Yes (mock_switch)  9083  9443
+ReqChkTxn  Yes (mock_switch)  9083  9443
+ReqValAdd  Yes (mock_switch)  9083  9443
+
+Test from own PC: $HostParam='localhost'. From another PC: $HostParam='<IMPS server IP>' (e.g. 192.168.1.38).
+
+ID format: msgId and Txn id must be 35 chars (3 BPC + 32), e.g. HBT00000000000000000000000000000001.
 
 ---
 
-## Protocol
+Prerequisites
 
-- **Request:** `[4 bytes length big-endian][XML payload]`
-- **Format:** NPCI↔IMPS XML; IMPS↔Switch ISO
-- **txn_id:** Same value across the full flow (Rules 021/022)
 
-### ACK flow (compliant)
+1. Start IMPS Backend (socket enabled, port 9083): cd Imps-backend && mvn spring-boot:run (see ../TESTING_GUIDE.txt (../TESTING_GUIDE.txt) for full commands).
+2. For ReqPay/ReqChkTxn/ReqValAdd: start mock_switch (port 9084): cd mock_switch && mvn spring-boot:run.
+3. For npci.compliant-flow: true: start mock_npci (port 9085): cd mock_npci && mvn spring-boot:run so IMPS can send Resp outbound.
+4. REST optional: set routing.switch.rest.enabled: true in IMPS for HTTP instead of socket
+
+---
+
+Protocol
+
+
+- Request: [4 bytes length big-endian][XML payload]
+- Format: NPCI↔IMPS XML; IMPS↔Switch ISO
+- txn_id: Same value across the full flow (Rules 021/022)
+
+ACK flow (compliant)
+
 
 1. NPCI sends Req (XML).
 2. IMPS sends ACK (XML) on same socket → NPCI closes.
 3. IMPS processes, connects to Switch 9084, gets Resp.
-4. IMPS opens **new** connection to mock_npci:9085, sends Resp, reads ACK, closes.
-5. **Client reads once:** ACK only.
+4. IMPS opens new connection to mock_npci:9085, sends Resp, reads ACK, closes.
+5. Client reads once: ACK only.
 
-### ACK flow (legacy)
+ACK flow (legacy)
+
 
 1. NPCI sends Req → IMPS sends ACK → IMPS sends Resp on same socket.
-2. **Client reads twice:** ACK, then Resp.
+2. Client reads twice: ACK, then Resp.
 
-| Step | From | To | Message | Format |
-|------|------|-----|---------|--------|
-| 1 | NPCI | IMPS | Req | XML |
-| 2 | IMPS | NPCI | ACK | XML |
-| 3 | IMPS | Switch | Req | ISO |
-| 4 | Switch | IMPS | Resp | ISO |
-| 5 | IMPS | NPCI | Resp | XML (compliant: new conn to 9085) |
-| 6 | NPCI | IMPS | ACK | XML |
+Step  From  To  Message  Format
+1  NPCI  IMPS  Req  XML
+2  IMPS  NPCI  ACK  XML
+3  IMPS  Switch  Req  ISO
+4  Switch  IMPS  Resp  ISO
+5  IMPS  NPCI  Resp  XML (compliant: new conn to 9085)
+6  NPCI  IMPS  ACK  XML
 
 ---
 
-## 1. Generic helper (PowerShell)
+1. Generic helper (PowerShell)
 
-**Compliant (read once – ACK only):** `Send-SocketXml-Compliant`.  
-**Legacy (read twice – ACK + Resp):** `Send-SocketXml`. Parameters: `HostParam`, `PortParam`, `Xml`.
+
+Compliant (read once – ACK only): Send-SocketXml-Compliant.  
+Legacy (read twice – ACK + Resp): Send-SocketXml. Parameters: HostParam, PortParam, Xml.
 
 ```powershell
-# Compliant flow: read once (ACK only)
+Compliant flow: read once (ACK only)
+
 function Send-SocketXml-Compliant {
     param([string]$HostParam='localhost',[int]$PortParam=9083,[string]$Xml)
     $tcp = New-Object System.Net.Sockets.TcpClient($HostParam, $PortParam)
@@ -90,7 +96,8 @@ function Send-SocketXml-Compliant {
     return [System.Text.Encoding]::UTF8.GetString($respBuf)
 }
 
-# Legacy flow: read twice (ACK, then Resp)
+Legacy flow: read twice (ACK, then Resp)
+
 function Send-SocketXml {
     param([string]$HostParam='localhost',[int]$PortParam=9083,[string]$Xml)
     $tcp = New-Object System.Net.Sockets.TcpClient($HostParam, $PortParam)
@@ -121,7 +128,8 @@ function Send-SocketXml {
 
 ---
 
-## 2. ReqHbt (heartbeat) – no Switch
+2. ReqHbt (heartbeat) – no Switch
+
 
 ```powershell
 $HostParam='localhost'; $PortParam=9083
@@ -129,14 +137,15 @@ $xml='<upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/"><Head ver="1.0" ts="20
 Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 ```
 
-**One-liner (compliant):**
+One-liner (compliant):
 ```powershell
 $tcp=New-Object System.Net.Sockets.TcpClient('localhost',9083);$s=$tcp.GetStream();$xml='<upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/"><Head ver="1.0" ts="2026-02-06T10:00:00+05:30" orgId="BANK01" msgId="HBT00000000000000000000000000000001"/><Txn id="HBT00000000000000000000000000000001" note="Heartbeat" refId="1" refUrl="https://npci.org.in/" ts="2026-02-06T10:00:00+05:30" type="Hbt"/><HbtMsg type="ALIVE" value="NA"/></upi:ReqHbt>';$b=[System.Text.Encoding]::UTF8.GetBytes($xml);$len=[System.BitConverter]::GetBytes([int][uint32]$b.Length);[Array]::Reverse($len);$s.Write($len,0,4);$s.Write($b,0,$b.Length);$s.Flush();$lb=New-Object byte[] 4;$s.Read($lb,0,4)|Out-Null;[Array]::Reverse($lb);$rl=[System.BitConverter]::ToInt32($lb,0);$rb=New-Object byte[] $rl;$s.Read($rb,0,$rl)|Out-Null;[System.Text.Encoding]::UTF8.GetString($rb)
 ```
 
 ---
 
-## 3. ReqListAccPvd – no Switch
+3. ReqListAccPvd – no Switch
+
 
 ```powershell
 $HostParam='localhost'; $PortParam=9083
@@ -146,7 +155,8 @@ Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 
 ---
 
-## 4. ReqPay – requires mock_switch
+4. ReqPay – requires mock_switch
+
 
 ```powershell
 $HostParam='localhost'; $PortParam=9083
@@ -156,7 +166,8 @@ Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 
 ---
 
-## 5. ReqChkTxn – requires mock_switch
+5. ReqChkTxn – requires mock_switch
+
 
 ```powershell
 $HostParam='localhost'; $PortParam=9083
@@ -166,7 +177,8 @@ Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 
 ---
 
-## 6. ReqValAdd – requires mock_switch
+6. ReqValAdd – requires mock_switch
+
 
 ```powershell
 $HostParam='localhost'; $PortParam=9083
@@ -176,11 +188,12 @@ Send-SocketXml-Compliant -HostParam $HostParam -PortParam $PortParam -Xml $xml
 
 ---
 
-## 7. Reverse flow – Switch → IMPS ([4 bytes][ISO], port 9086/9446)
+7. Reverse flow – Switch → IMPS ([4 bytes][ISO], port 9086/9446)
 
-Switch connects to IMPS on **9086** (TCP) or **9446** (TLS). Protocol: `[4 bytes length big-endian][ISO]` — same framing as NPCI→IMPS, but payload is ISO instead of XML.
 
-**PowerShell helper (plain TCP):**
+Switch connects to IMPS on 9086 (TCP) or 9446 (TLS). Protocol: [4 bytes length big-endian][ISO] — same framing as NPCI→IMPS, but payload is ISO instead of XML.
+
+PowerShell helper (plain TCP):
 
 ```powershell
 function Send-SocketIso-Switch {
@@ -203,13 +216,14 @@ function Send-SocketIso-Switch {
 }
 ```
 
-Use with ISO bytes from your packager (e.g. 0200 financial, 0800 heartbeat). IMPS returns `[4 bytes][ISO]` response (0210 or 0810 ACK).
+Use with ISO bytes from your packager (e.g. 0200 financial, 0800 heartbeat). IMPS returns [4 bytes][ISO] response (0210 or 0810 ACK).
 
 ---
 
-## 8. TLS (SslStream) – port 9443
+8. TLS (SslStream) – port 9443
 
-When `ssl.enabled: true`, use port **9443** and wrap the stream with `SslStream`:
+
+When ssl.enabled: true, use port 9443 and wrap the stream with SslStream:
 
 ```powershell
 $hostParam = 'localhost'; $portParam = 9443
@@ -233,55 +247,56 @@ $ssl.Read($respBuf, 0, $respLen) | Out-Null
 $ssl.Close(); $tcp.Close()
 ```
 
-Keystore/keytool: see [SOCKET_SSL_TLS.md](SOCKET_SSL_TLS.md).
+Keystore/keytool: see SOCKET_SSL_TLS.md (SOCKET_SSL_TLS.txt).
 
 ---
 
-## 9. Test from another PC
+9. Test from another PC
+
 
 Use IMPS server IP instead of localhost:
 
 ```powershell
 $HostParam='192.168.1.38'; $PortParam=9083
-# Then run any Send-SocketXml-Compliant / Send-SocketXml with -HostParam $HostParam -PortParam $PortParam -Xml $xml
+Then run any Send-SocketXml-Compliant / Send-SocketXml with -HostParam $HostParam -PortParam $PortParam -Xml $xml
+
 ```
 
 ---
 
-## Socket ports and modes
+Socket ports and modes
 
-| Service | Port | Role |
-|---------|------|------|
-| IMPS | 9083 / 9443 | NPCI socket server ([4 bytes][XML]) |
-| IMPS | 9086 / 9446 | Switch socket server – reverse flow ([4 bytes][ISO]) |
-| mock_switch | 9084 / 9444 | Switch socket server ([4 bytes][ISO]) |
-| mock_npci | 9085 / 9445 | Receives Resp from IMPS (compliant flow) |
 
-**Reverse flow (Switch → IMPS):** Same connection pattern as NPCI→IMPS. Switch connects to IMPS on 9086 (TCP) or 9446 (TLS), sends `[4 bytes][ISO]`, receives `[4 bytes][ISO]`. Use PowerShell with ISO bytes instead of XML.
+Service  Port  Role
+IMPS  9083 / 9443  NPCI socket server ([4 bytes][XML])
+IMPS  9086 / 9446  Switch socket server – reverse flow ([4 bytes][ISO])
+mock_switch  9084 / 9444  Switch socket server ([4 bytes][ISO])
+mock_npci  9085 / 9445  Receives Resp from IMPS (compliant flow)
 
-| Connection | Config |
-|------------|--------|
-| NPCI → IMPS | `socket.enabled: true` |
-| IMPS → Switch | `routing.switch.socket.enabled: true`, `institution_master` |
-| IMPS → NPCI | `npci.compliant-flow: true`, `npci.socket.host:port` |
+Reverse flow (Switch → IMPS): Same connection pattern as NPCI→IMPS. Switch connects to IMPS on 9086 (TCP) or 9446 (TLS), sends [4 bytes][ISO], receives [4 bytes][ISO]. Use PowerShell with ISO bytes instead of XML.
 
----
-
-## Troubleshooting
-
-| Symptom | Check |
-|--------|--------|
-| Connection refused | IMPS running? `socket.enabled: true`? Port 9083? mock_npci on 9085 (compliant)? |
-| ACK instead of RespHbt/RespPay | Use 35-char msgId and Txn id (Rules 021/022) |
-| No response / timeout | mock_switch running (ReqPay etc.)? mock_npci running (compliant)? Response timeout 60s? |
-| Invalid length | Length = 4 bytes big-endian, matching XML byte count |
+Connection  Config
+NPCI → IMPS  `socket.enabled: true`
+IMPS → Switch  `routing.switch.socket.enabled: true`, `institution_master`
+IMPS → NPCI  `npci.compliant-flow: true`, `npci.socket.host:port`
 
 ---
 
-## Reference
+Troubleshooting
 
-| Document | Purpose |
-|----------|---------|
-| [NPCI_IMPS_Message_Formats](../specs/NPCI_IMPS_Message_Formats.md) | Req/Resp XML structures |
-| [PROJECT_CONNECTIONS](../PROJECT_CONNECTIONS.md) | Ports, config, databases |
-| [SOCKET_SSL_TLS](SOCKET_SSL_TLS.md) | Keytool, OpenSSL, firewall |
+
+Symptom  Check
+Connection refused  IMPS running? `socket.enabled: true`? Port 9083? mock_npci on 9085 (compliant)?
+ACK instead of RespHbt/RespPay  Use 35-char msgId and Txn id (Rules 021/022)
+No response / timeout  mock_switch running (ReqPay etc.)? mock_npci running (compliant)? Response timeout 60s?
+Invalid length  Length = 4 bytes big-endian, matching XML byte count
+
+---
+
+Reference
+
+
+Document  Purpose
+[NPCI_IMPS_Message_Formats](../specs/NPCI_IMPS_Message_Formats.txt)  Req/Resp XML structures
+[PROJECT_CONNECTIONS](../PROJECT_CONNECTIONS.txt)  Ports, config, databases
+[SOCKET_SSL_TLS](SOCKET_SSL_TLS.txt)  Keytool, OpenSSL, firewall

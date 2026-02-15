@@ -16,10 +16,14 @@ public class ImpsMockController {
 
     @PostMapping(value = { "/reqpay/{txnId}", "/pay/req/{txnId}" }, consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)
     public String payReq(@PathVariable String txnId, @RequestBody String xml, HttpServletRequest request) {
-        System.out.println("[MOCK_NPCI] ReqPay received from IMPS txnId=" + txnId + ":");
-        System.out.println(xml);
+        System.out.println("========== [NPCI] IMPS → NPCI | REQ received | ReqPay ==========");
+        System.out.println("  REQ received from: IMPS | TxnId: " + txnId);
+        System.out.println("  ---------- XML (first 300) ----------");
+        System.out.println("  " + (xml != null && xml.length() > 300 ? xml.substring(0, 300) + "..." : xml));
         String respPay = buildRespPaySuccess(xml, txnId);
-        System.out.println("[MOCK_NPCI] RespPay (SUCCESS) sent to IMPS");
+        System.out.println("========== [NPCI] NPCI → IMPS | RESP sent | RespPay (SUCCESS) ==========");
+        System.out.println("  RESP sent to: IMPS | connection will close");
+        System.out.println("==========================================");
         return respPay;
     }
 
@@ -69,9 +73,12 @@ public class ImpsMockController {
     }
 
     private String logAndAck(String api, String txnId, String xml, HttpServletRequest request) {
-        System.out.println("[MOCK_NPCI] " + api + " received from IMPS txnId=" + txnId + ":");
-        System.out.println(xml);
-        System.out.println("[MOCK_NPCI] ACK sent to IMPS");
+        System.out.println("========== [NPCI] IMPS → NPCI | REQ received | " + api + " ==========");
+        System.out.println("  REQ received from: IMPS | TxnId: " + txnId);
+        System.out.println("========== [NPCI] NPCI → IMPS | RESP (ACK) sent ==========");
+        System.out.println("  RESP sent to: IMPS | connection will close");
+        System.out.println("  XML (first 500): " + (xml != null && xml.length() > 500 ? xml.substring(0, 500) + "..." : xml));
+        System.out.println("==========================================");
         String msgId = extractMsgId(xml);
         String ack = buildAck(api, msgId != null ? msgId : txnId);
         return ack;

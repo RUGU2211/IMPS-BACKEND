@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Inbound request handling. ACK is sent via the provided AckSender (REST to NPCI Mock).
+ * Inbound request handling. ACK is sent via the provided AckSender (REST to NPCI).
  */
 @Service
 public class ImpsInboundService {

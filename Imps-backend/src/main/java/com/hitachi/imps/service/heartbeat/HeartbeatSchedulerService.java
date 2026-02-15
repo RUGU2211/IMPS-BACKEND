@@ -51,6 +51,11 @@ public class HeartbeatSchedulerService {
     @Value("${imps.heartbeat.switch-check-ssl-ports:9444,9443}")
     private String switchCheckSslPorts;
 
+    @Value("${imps.routing.switch-default-host:localhost}")
+    private String switchDefaultHost;
+    @Value("${imps.routing.switch-default-port:9084}")
+    private String switchDefaultPort;
+
     @Autowired
     private InstitutionMasterRepository institutionRepo;
     @Autowired
@@ -81,8 +86,8 @@ public class HeartbeatSchedulerService {
             m.put("id", inst.getId());
             m.put("name", inst.getName());
             m.put("request_org_id", inst.getRequestOrgId());
-            m.put("switch_ip", inst.getSwitchIp() != null ? inst.getSwitchIp() : "localhost");
-            m.put("switch_port", inst.getSwitchPort() != null ? inst.getSwitchPort() : "9084");
+            m.put("switch_ip", inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : switchDefaultHost);
+            m.put("switch_port", inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : switchDefaultPort);
             banksToCheck.add(m);
         }
         String reqJson = buildJson(Map.of("banks", banksToCheck, "checked_at", LocalDateTime.now().toString()));
@@ -97,8 +102,8 @@ public class HeartbeatSchedulerService {
         Map<String, Object> contactDetails = new LinkedHashMap<>();
 
         for (InstitutionMaster inst : all) {
-            String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp().trim() : "localhost";
-            int port = parsePort(inst.getSwitchPort(), 9084);
+            String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp().trim() : switchDefaultHost;
+            int port = parsePort(inst.getSwitchPort(), parseIntSafe(switchDefaultPort, 9084));
             String addr = host + ":" + port;
             ConnectResult result = tryConnect(host, port, port);
             boolean reachable = result.success;
@@ -166,7 +171,7 @@ public class HeartbeatSchedulerService {
     }
 
     private ConnectResult tryConnect(String host, int port, int portForSslCheck) {
-        if (host == null || host.isBlank()) host = "localhost";
+        if (host == null || host.isBlank()) host = switchDefaultHost;
         ConnectResult r = new ConnectResult();
         boolean useSsl = isSslPort(portForSslCheck);
         try {
@@ -215,6 +220,15 @@ public class HeartbeatSchedulerService {
         ssl.connect(new java.net.InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
         ssl.startHandshake();
         return ssl;
+    }
+
+    private static int parseIntSafe(String s, int defaultVal) {
+        if (s == null || s.isBlank()) return defaultVal;
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
     }
 
     private static int parsePort(String s, int defaultPort) {

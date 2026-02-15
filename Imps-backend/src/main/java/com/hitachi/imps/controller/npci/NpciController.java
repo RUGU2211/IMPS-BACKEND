@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.exception.CommonCodeValidationException;
 import com.hitachi.imps.exception.ReqPayValidationException;
 import com.hitachi.imps.service.ImpsInboundService;
@@ -19,10 +19,10 @@ import com.hitachi.imps.service.ack.AckSender;
 public class NpciController {
 
     @Autowired private ImpsInboundService impsInboundService;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
 
     private AckSender restAckSender() {
-        return ack -> npciMockClient.sendAckToNpciMock(ack);
+        return ack -> npciRestClient.sendAck(ack);
     }
 
     @PostMapping(value = "/reqpay/{txnId}", consumes = MediaType.APPLICATION_XML_VALUE, produces = MediaType.APPLICATION_XML_VALUE)

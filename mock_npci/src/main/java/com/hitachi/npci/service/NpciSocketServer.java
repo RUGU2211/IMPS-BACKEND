@@ -40,12 +40,12 @@ public class NpciSocketServer {
 
     private ServerSocket serverSocket;
     private final ExecutorService acceptor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "npci-mock-socket-acceptor");
+        Thread t = new Thread(r, "npci-socket-acceptor");
         t.setDaemon(false);
         return t;
     });
     private final ExecutorService handlers = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "npci-mock-socket-handler");
+        Thread t = new Thread(r, "npci-socket-handler");
         t.setDaemon(false);
         return t;
     });
@@ -105,9 +105,9 @@ public class NpciSocketServer {
                 byte[] payload = new byte[length];
                 in.readFully(payload);
                 String xml = new String(payload, StandardCharsets.UTF_8);
-                System.out.println("[MOCK_NPCI] Resp received from IMPS (socket):");
+                System.out.println("[NPCI] Resp received from IMPS (socket):");
                 System.out.println(xml);
-                System.out.println("[MOCK_NPCI] ACK sent to IMPS");
+                System.out.println("[NPCI] ACK sent to IMPS");
 
                 String ackXml = buildAck(xml);
                 byte[] ackBytes = ackXml.getBytes(StandardCharsets.UTF_8);

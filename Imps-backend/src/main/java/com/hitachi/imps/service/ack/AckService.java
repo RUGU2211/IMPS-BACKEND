@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 
 import org.jpos.iso.ISOException;
 import org.jpos.iso.ISOMsg;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.exception.InvalidReqMsgIdException;
@@ -28,6 +29,9 @@ import com.hitachi.imps.util.IsoUtil;
  */
 @Service
 public class AckService {
+
+    @Value("${imps.org-id:BANK01}")
+    private String orgId;
 
     private static final String XMLNS_NS2 = "http://npci.org/upi/schema/";
     private static final String XMLNS_NS3 = "http://npci.org/cm/schema/";
@@ -86,7 +90,7 @@ public class AckService {
         String req = reqMsgId != null && reqMsgId.length() >= 35 ? reqMsgId.substring(0, 35) : (reqMsgId != null ? reqMsgId : "");
         String code = respCode != null ? respCode : "MJ";
         String ns = "http://npci.org/upi/schema/";
-        return "<ns2:RespPay xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn id=\"" + req + "\" note=\"Failure\" refId=\"\" refUrl=\"\" ts=\"" + ts + "\" type=\"PAY\" subType=\"PAY\" initiationMode=\"API\" refCategory=\"00\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(code) + "\"><ErrMsg>" + escapeXmlAttr(errMsg != null ? errMsg : "") + "</ErrMsg></Resp></ns2:RespPay>";
+        return "<ns2:RespPay xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"" + escapeXmlAttr(com.hitachi.imps.converter.RespPaySpec.truncate(orgId, com.hitachi.imps.converter.RespPaySpec.HEAD_ORGID_MAX)) + "\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn id=\"" + req + "\" note=\"Failure\" refId=\"\" refUrl=\"\" ts=\"" + ts + "\" type=\"PAY\" subType=\"PAY\" initiationMode=\"API\" refCategory=\"00\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(code) + "\"><ErrMsg>" + escapeXmlAttr(errMsg != null ? errMsg : "") + "</ErrMsg></Resp></ns2:RespPay>";
     }
 
     /** Build failure RespChkTxn (institution validation or BANK_DOWN). Includes ErrMsg when provided. */
@@ -162,6 +166,6 @@ public class AckService {
         String req = reqMsgId != null && reqMsgId.length() >= 35 ? reqMsgId.substring(0, 35) : (reqMsgId != null ? reqMsgId : "");
         String ns = "http://npci.org/upi/schema/";
         String errContent = (errMsg != null && !errMsg.isBlank()) ? "<ErrMsg>" + escapeXmlAttr(errMsg) + "</ErrMsg>" : "";
-        return "<ns2:" + api + " xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(respCode) + "\">" + errContent + "</Resp></ns2:" + api + ">";
+        return "<ns2:" + api + " xmlns:ns2=\"" + ns + "\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"" + escapeXmlAttr(com.hitachi.imps.converter.RespPaySpec.truncate(orgId, com.hitachi.imps.converter.RespPaySpec.HEAD_ORGID_MAX)) + "\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Resp reqMsgId=\"" + escapeXmlAttr(req) + "\" result=\"FAILURE\" errCode=\"" + escapeXmlAttr(respCode) + "\">" + errContent + "</Resp></ns2:" + api + ">";
     }
 }

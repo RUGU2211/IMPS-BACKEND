@@ -6,13 +6,15 @@ import com.hitachi.imps.entity.InstitutionMaster;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import com.hitachi.imps.config.RoutingConfig;
 import com.hitachi.imps.repository.InstitutionMasterRepository;
 
 /**
  * Resolves switch address (host, port) from institution_master by request_org_id.
  * Flow: Receive ReqPay from NPCI → read Head @orgId (request_org_id) → lookup institution_master → get switch_ip, switch_port → forward.
- * Falls back to application.yml (routing.switch) when no matching institution found.
+ * Falls back to application.yml (routing.switch and imps.routing) when no matching institution or null switch_ip/port.
  */
 @Service
 public class SwitchAddressResolver {
@@ -22,6 +24,12 @@ public class SwitchAddressResolver {
 
     @Autowired
     private RoutingConfig routingConfig;
+
+    @Value("${imps.routing.switch-default-host:localhost}")
+    private String switchDefaultHost;
+
+    @Value("${imps.routing.switch-default-port:9084}")
+    private String switchDefaultPort;
 
     /**
      * True when institution exists and active=false (bank/switch down).
@@ -36,12 +44,16 @@ public class SwitchAddressResolver {
 
     /**
      * Log failed switch connection details from institution_master to console.
-     * Used by ReqPay/ReqChkTxn/ReqValAdd when BANK_DOWN.
+     * Used by ReqPay/ReqChkTxn/ReqValAdd when BANK_DOWN. Uses config fallbacks for null switch_ip/port.
      */
-    public static void logFailedSwitchToConsole(InstitutionMaster inst) {
+    public void logFailedSwitchToConsole(InstitutionMaster inst) {
+        logFailedSwitchToConsoleStatic(inst, switchDefaultHost, switchDefaultPort);
+    }
+
+    private static void logFailedSwitchToConsoleStatic(InstitutionMaster inst, String defaultHost, String defaultPort) {
         if (inst == null) return;
-        String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : "localhost";
-        String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : "9084";
+        String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : defaultHost;
+        String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : defaultPort;
         System.out.println("[IMPS] Switch connection FAILED (institution_master): id=" + inst.getId()
             + " name=\"" + (inst.getName() != null ? inst.getName() : "") + "\""
             + " request_org_id=" + (inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "")
@@ -52,14 +64,18 @@ public class SwitchAddressResolver {
 
     /**
      * Build proper NPCI error message when bank switch is down.
-     * Includes bank name, orgId, switch address, and contact details for NPCI XML ErrMsg.
+     * Includes bank name, orgId, switch address, and contact details for NPCI XML ErrMsg. Uses config fallbacks for null switch_ip/port.
      */
-    public static String buildBankDownErrMsg(InstitutionMaster inst) {
+    public String buildBankDownErrMsg(InstitutionMaster inst) {
+        return buildBankDownErrMsgStatic(inst, switchDefaultHost, switchDefaultPort);
+    }
+
+    private static String buildBankDownErrMsgStatic(InstitutionMaster inst, String defaultHost, String defaultPort) {
         if (inst == null) return "Bank switch unreachable. Transaction failed.";
         String name = inst.getName() != null ? inst.getName() : "Unknown";
         String orgId = inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "";
-        String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : "localhost";
-        String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : "9084";
+        String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : defaultHost;
+        String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : defaultPort;
         StringBuilder sb = new StringBuilder();
         sb.append("Transaction failed: Bank switch is down. Bank: ").append(name);
         if (!orgId.isEmpty()) sb.append(" (").append(orgId).append(")");
@@ -103,19 +119,23 @@ public class SwitchAddressResolver {
      * Uses institution_master first; falls back to application.yml if not found.
      */
     public SwitchAddress resolve(String requestOrgId) {
+        RoutingConfig.SwitchSocketConfig socket = routingConfig.getSwitch().getSocket();
+        boolean useSsl = socket != null && socket.isSslEnabled();
+        int sslPort = socket != null ? socket.getSslPort() : 9444;
+        int tcpPort = socket != null ? socket.getPort() : 9084;
+
         if (requestOrgId != null && !requestOrgId.isBlank()) {
             Optional<InstitutionMaster> opt = institutionRepo.findFirstByRequestOrgIdAndActiveTrueOrderByIdAsc(requestOrgId.trim());
             if (opt.isPresent()) {
                 InstitutionMaster inst = opt.get();
-                String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp().trim() : "localhost";
-                int port = parsePort(inst.getSwitchPort(), 9084);
+                String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp().trim() : switchDefaultHost;
+                int port = parsePort(inst.getSwitchPort(), useSsl ? sslPort : tcpPort);
+                if (useSsl && port == 9084) port = sslPort;
                 return new SwitchAddress(host, port, true);
             }
         }
-        // Fallback to application.yml
-        RoutingConfig.SwitchSocketConfig socket = routingConfig.getSwitch().getSocket();
-        String host = socket != null && socket.getHost() != null ? socket.getHost() : "localhost";
-        int port = socket != null ? socket.getPort() : 9084;
+        int port = useSsl ? sslPort : tcpPort;
+        String host = socket != null && socket.getHost() != null && !socket.getHost().isBlank() ? socket.getHost() : switchDefaultHost;
         return new SwitchAddress(host, port, false);
     }
 

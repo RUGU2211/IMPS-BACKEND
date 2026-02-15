@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<upi:RespHbt xmlns:upi="http://npci.org/upi/schema/">
+    <Head ver="1.0" ts="2026-01-25T10:30:00.000+05:30" orgId="SWITCH" msgId="{{msgId}}"/>
+    <Txn id="{{txnId}}" note="ALIVE" refId="" refUrl="" ts="2026-01-25T10:30:00.000+05:30" type="Hbt"/>
+    <HbtMsg type="ALIVE" value="NA"/>
+</upi:RespHbt>

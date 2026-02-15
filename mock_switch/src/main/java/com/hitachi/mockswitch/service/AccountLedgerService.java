@@ -68,6 +68,7 @@ public class AccountLedgerService {
                 return RC_INVALID_ACCOUNT;
             }
 
+            long t0 = System.currentTimeMillis();
             // Resolve payer: DE102 + DE32 (first 4 of IFSC)
             Optional<AccountMaster> payerOpt = findPayerAccount(payerAccount, payerIfscPrefix);
             if (payerOpt.isEmpty()) {
@@ -83,6 +84,7 @@ public class AccountLedgerService {
                 System.out.println("AccountLedger: payee not found " + payeeAccount + "@" + payeeIfsc);
                 return RC_INVALID_ACCOUNT;
             }
+            long dbLookupMs = System.currentTimeMillis() - t0;
 
             AccountMaster payer = payerOpt.get();
             AccountMaster payee = payeeOpt.get();
@@ -96,31 +98,37 @@ public class AccountLedgerService {
             LocalDateTime now = LocalDateTime.now();
 
             // Debit payer
+            long tDebit = System.currentTimeMillis();
             BigDecimal oldPayerBalance = payer.getAvailableBalance() != null ? payer.getAvailableBalance() : BigDecimal.ZERO;
             payer.setAvailableBalance(balance.subtract(amountRupees));
             payer.setLastTxnRrn(rrn);
             payer.setLastUpdatedTime(now);
             accountMasterRepository.save(payer);
-            System.out.println("[MOCK_SWITCH] ========== ACCOUNT_MASTER UPDATE (DEBIT) ==========");
-            System.out.println("[MOCK_SWITCH] Account: " + payer.getAccountNumber() + "@" + payer.getIfscCode());
-            System.out.println("[MOCK_SWITCH] Old Balance: " + oldPayerBalance + " | Amount Debited: " + amountRupees + " | New Balance: " + payer.getAvailableBalance());
-            System.out.println("[MOCK_SWITCH] RRN: " + rrn + " | Updated Time: " + now);
-            System.out.println("==========================================");
+            long debitMs = System.currentTimeMillis() - tDebit;
+            System.out.println("---------- [SWITCH] ACCOUNT_MASTER | DEBIT ----------");
+            System.out.println("  Account: " + payer.getAccountNumber() + "@" + payer.getIfscCode());
+            System.out.println("  Old Balance: " + oldPayerBalance + " | Amount Debited: " + amountRupees + " | New Balance: " + payer.getAvailableBalance());
+            System.out.println("  RRN: " + rrn + " | Updated: " + now);
 
             // Credit payee
+            long tCredit = System.currentTimeMillis();
             BigDecimal payeeBalance = payee.getAvailableBalance() != null ? payee.getAvailableBalance() : BigDecimal.ZERO;
             BigDecimal oldPayeeBalance = payeeBalance;
             payee.setAvailableBalance(payeeBalance.add(amountRupees));
             payee.setLastTxnRrn(rrn);
             payee.setLastUpdatedTime(now);
             accountMasterRepository.save(payee);
-            System.out.println("[MOCK_SWITCH] ========== ACCOUNT_MASTER UPDATE (CREDIT) ==========");
-            System.out.println("[MOCK_SWITCH] Account: " + payee.getAccountNumber() + "@" + payee.getIfscCode());
-            System.out.println("[MOCK_SWITCH] Old Balance: " + oldPayeeBalance + " | Amount Credited: " + amountRupees + " | New Balance: " + payee.getAvailableBalance());
-            System.out.println("[MOCK_SWITCH] RRN: " + rrn + " | Updated Time: " + now);
-            System.out.println("==========================================");
-
-            System.out.println("[MOCK_SWITCH] Ledger: DEBIT " + amountRupees + " from " + payer.getAccountNumber() + "@" + payer.getIfscCode() + " -> CREDIT to " + payee.getAccountNumber() + "@" + payee.getIfscCode() + " RRN=" + rrn);
+            long creditMs = System.currentTimeMillis() - tCredit;
+            System.out.println("---------- [SWITCH] ACCOUNT_MASTER | CREDIT ----------");
+            System.out.println("  Account: " + payee.getAccountNumber() + "@" + payee.getIfscCode());
+            System.out.println("  Old Balance: " + oldPayeeBalance + " | Amount Credited: " + amountRupees + " | New Balance: " + payee.getAvailableBalance());
+            System.out.println("  RRN: " + rrn + " | Updated: " + now);
+            System.out.println("[SWITCH] Ledger: DEBIT " + amountRupees + " from " + payer.getAccountNumber() + "@" + payer.getIfscCode() + " → CREDIT to " + payee.getAccountNumber() + "@" + payee.getIfscCode() + " | RRN=" + rrn);
+            System.out.println("========= PERFORMANCE =========");
+            System.out.println("DB Lookup: " + dbLookupMs + "ms");
+            System.out.println("Debit Update: " + debitMs + "ms");
+            System.out.println("Credit Update: " + creditMs + "ms");
+            System.out.println("===============================");
             return RC_SUCCESS;
 
         } catch (Exception e) {

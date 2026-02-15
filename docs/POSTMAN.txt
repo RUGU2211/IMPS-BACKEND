@@ -1,0 +1,136 @@
+Postman – IMPS API Collection
+
+
+Use the Postman collection to test IMPS over HTTP or HTTPS. Default profile is ssl (HTTPS). Collection has two flows: NPCI - IMPS req flow (XML) and Switch - IMPS flow (binary ISO, same POST structure with .bin files). IMPS→NPCI responses are sent automatically by the backend.
+
+Collection file
+
+
+- Path: postman/IMPS_API_Collection.postman_collection.json
+- Import: Postman → Import → Upload the file (or drag-and-drop).
+
+---
+
+Dynamic URL format and variables
+--------------------------------
+API path format: https://{{host}}:{{port}}/imps/{{reqtype|resptype}}/{{txnId}}
+Example: https://192.168.1.38:8444/imps/reqpay/{{txnId}}
+
+Set these in collection variables; prerequest script builds all base URLs. Change host or any port once and all requests update.
+
+Variable    Default           Use for
+host        192.168.1.38      Host IP (change for different machine)
+impsPort    8443              IMPS REST HTTPS (8081 for HTTP)
+switchPort  8444              Switch REST HTTPS (8082 for HTTP)
+npciPort    8445              NPCI REST HTTPS (8083 for HTTP)
+impsBaseUrl (set by script)   https://{{host}}:{{impsPort}}
+switchBaseUrlHttps (set by script)  https://{{host}}:{{switchPort}}
+npciMockBaseUrl (set by script)  https://{{host}}:{{npciPort}}
+txnId       (35 chars)        Pre-request script sets random; override as needed
+msgId       (35 chars)        Same as above
+orgId       BANK01            NPCI org
+npciOrgId   NPCI              NPCI org for responses
+
+TCP / TLS (no Postman): Socket testing uses PowerShell or other TCP client. See TESTING_GUIDE.md (TESTING_GUIDE.txt) and socket/SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt).
+
+Connection  Protocol  Port  Postman?
+IMPS REST  HTTP  8081  Yes – use `{{impsBaseUrl}}`
+IMPS REST  HTTPS  8443  Yes – use `{{impsBaseUrlHttps}}` (disable SSL cert verification for dev)
+IMPS Socket  TCP  9083  No – use PowerShell / SOCKET_GUIDE
+IMPS Socket  TLS  9443  No – use PowerShell with SslStream
+Mock Switch  HTTP/HTTPS  8082 / 8444  Yes – `{{switchBaseUrl}}` / `{{switchBaseUrlHttps}}`
+Mock Switch Socket  TCP/TLS  9084 / 9444  No
+NPCI Mock  HTTP  8083  Yes – `{{npciMockBaseUrl}}`
+NPCI Mock Socket  TCP/TLS  9085 / 9445  No
+
+---
+
+Folders and format
+
+
+1. NPCI - IMPS req flow (Port 8081 / 8443)
+
+
+- Direction: NPCI → IMPS (simulate NPCI sending requests).
+- Format: XML.
+- URL: POST {{impsBaseUrl}}/imps/{reqtype}/{{txnId}}.
+- Headers: Content-Type: application/xml, Accept: application/xml.
+- Body: Raw XML (ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd).
+- IDs: msgId and Txn @id must be 35 characters (3 BPC + 32). Pre-request script sets txnId and msgId randomly.
+
+2. Switch - IMPS flow (Port 8081 / 8443)
+
+
+- Direction: Switch → IMPS (same POST requests as NPCI - IMPS req flow; each uses binary .bin file).
+- Format: Binary ISO (Body → file from postman/samples/iso_req*.bin).
+- Samples: postman/samples/iso_reqpay.bin, iso_reqchktxn.bin, etc.
+
+Two ways to send Switch → IMPS (and where logs appear):
+
+A) Direct to IMPS
+- URL: POST {{impsBaseUrl}}/imps/reqpay/{{txnId}} (same for reqchktxn, reqhbt, reqlistaccpvd, reqvaladd).
+- Request goes straight to IMPS. Console: IMPS prints "[IMPS] REQUEST FROM SWITCH (HTTP)" and "[IMPS] RESPONSE TO SWITCH (HTTP)" with full ISO. mock_switch console shows nothing (it is not in the path).
+- DB: IMPS writes to imps_db (transaction, message_audit_log: SWITCH_REQPAY_ISO_IN, NPCI_REQPAY_XML_OUT, NPCI_RESPPAY_XML_IN, SWITCH_RESPPAY_ISO_OUT). For ReqPay, IMPS calls NPCI mock to get RespPay then returns ISO to Postman.
+
+B) Via Switch proxy (flow 2 – logs on all 3 + switch_db updated)
+- URL: POST https://{{host}}:{{switchPort}}/imps/reqpay/{{txnId}} (same path as IMPS; use switchPort so request hits Switch).
+- Request goes: Postman → Switch (switchPort) → IMPS → NPCI. Logs appear on Switch, IMPS, and NPCI consoles with [CONN 1], [CONN 2], [CONN 3].
+- DB: Same as (A) in imps_db; in addition Switch updates switch_db.account_master for ReqPay (debit/credit). account_master is updated ONLY when the request goes via Switch (this path).
+- Connection flow: See docs/CONNECTION_FLOW_SWITCH_IMPS.txt.
+
+3. NPCI Mock (Port 8083 / 8445)
+
+
+- Direction: IMPS → NPCI (simulate IMPS sending responses). In production, IMPS sends these automatically; no separate Postman flow needed.
+- Format: XML. Samples in postman/samples/resp_*.xml.
+
+4. Reverse flow – Switch → IMPS (ISO)
+
+
+Primary: Socket [4 bytes][ISO] — Same connection pattern as NPCI→IMPS. IMPS listens on 9086 (TCP) or 9446 (TLS). Switch sends [4 bytes][ISO], receives [4 bytes][ISO]. See SOCKET_GUIDE.md.
+
+Optional: REST (Body → binary)
+- Direction: Switch sends Request as binary ISO 8583; IMPS returns Response as binary ISO.
+- Format: Binary ISO (Body → binary in Postman).
+- URL: POST {{impsBaseUrl}}/imps/reqpay/{{txnId}} (and /imps/reqchktxn/, /imps/reqhbt/, /imps/reqlistaccpvd/, /imps/reqvaladd/).
+- Headers: Content-Type: application/octet-stream, Accept: application/octet-stream.
+- Body: In Postman, choose Body → binary and select an ISO 8583 binary file (e.g. 0200 for financial request). If you don’t have a file, use a TCP/socket tool or build ISO with your own packager.
+- Response: Binary ISO (e.g. 0210 or 0810 ACK).
+- HTTPS: Use {{impsBaseUrlHttps}} instead of {{impsBaseUrl}} when testing with profile ssl (port 8443). Turn off “SSL certificate verification” in Postman for self-signed certs.
+
+5. Reference – Response Codes
+
+
+- Reference only (DO NOT SEND). Lists response codes and types.
+
+---
+
+Testing HTTP vs HTTPS
+
+
+1. HTTPS (default): ssl profile is active in application.yml. Normal mvn spring-boot:run uses HTTPS (ports 8443, 8444, 8445). Use {{impsBaseUrl}} (default https://192.168.1.38:8443). Turn off "SSL certificate verification" in Postman for self-signed certs.
+2. HTTP: Run with -Dspring.profiles.active=default for HTTP (8081, 8082, 8083). Set impsBaseUrl to http://localhost:8081. See TESTING_GUIDE.md (TESTING_GUIDE.txt).
+
+---
+
+Proper format summary
+
+
+Flow  Connection  Format  Port
+NPCI → IMPS  Socket  [4 bytes][XML]  9083 / 9443
+**Switch → IMPS (reverse)**  **Socket**  **[4 bytes][ISO]**  **9086 / 9446**
+Switch → IMPS (reverse)  REST  Binary ISO body  8081 / 8443
+IMPS → Switch  Socket  [4 bytes][ISO]  9084 / 9444
+IMPS → NPCI  Socket  [4 bytes][XML]  9085 / 9445
+
+Reverse flow uses the same connection pattern as NPCI→IMPS: length-prefixed framing. For Switch the payload is ISO instead of XML.
+
+---
+
+See also
+
+
+- TESTING_GUIDE.md (TESTING_GUIDE.txt) – HTTP, TCP, TLS, HTTPS steps and test matrix.
+- PROJECT_CONNECTIONS.md (PROJECT_CONNECTIONS.txt) – Ports, DB, socket/HTTP config.
+- socket/SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt) – Socket protocol and PowerShell scripts.
+- socket/SOCKET_SSL_TLS.md (socket/SOCKET_SSL_TLS.txt) – TLS keytool and OpenSSL.

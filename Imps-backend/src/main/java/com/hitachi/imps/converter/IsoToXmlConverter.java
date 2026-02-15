@@ -1,6 +1,7 @@
 package com.hitachi.imps.converter;
 
 import org.jpos.iso.ISOMsg;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import com.hitachi.imps.iso.ImpsIsoPackager;
@@ -17,6 +18,9 @@ import java.util.UUID;
  */
 @Component
 public class IsoToXmlConverter {
+
+    @Value("${imps.org-id:BANK01}")
+    private String responseOrgId;
 
     private static final String NAMESPACE = "http://npci.org/upi/schema/";
     private static final String PROD_TYPE = "IMPS";
@@ -45,7 +49,7 @@ public class IsoToXmlConverter {
 
             return """
                 <ns2:ReqPay xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                     <Txn id="%s" note="Switch Request" custRef="%s" type="PAY" ts="%s"/>
                     <Payer addr="switch@bank" name="SWITCH_PAYER" seqNum="1" type="ENTITY" code="0000">
                         <Ac addrType="ACCOUNT">
@@ -66,7 +70,7 @@ public class IsoToXmlConverter {
                     </Payees>
                 </ns2:ReqPay>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                     txnId, iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     payerAc != null ? payerAc : "",
                     amount,
@@ -110,7 +114,7 @@ public class IsoToXmlConverter {
             String ifsc = RespPaySpec.exactLen(iso.getString(33), RespPaySpec.REF_IFSC_LEN, ' ');
             String txnId = RespPaySpec.exactLen(iso.getString(37), RespPaySpec.TXN_ID_LEN, '0');
             String reqMsgId = RespPaySpec.exactLen(iso.getString(11), RespPaySpec.RESP_REQMSGID_LEN, '0');
-            String orgId = RespPaySpec.truncate("SWITCH", RespPaySpec.HEAD_ORGID_MAX);
+            String orgId = RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX);
             String addr = RespPaySpec.truncate(acNum + "@bank.ifsc.npci", RespPaySpec.REF_ADDR_MAX);
             String regName = RespPaySpec.truncate("BENEFICIARY", RespPaySpec.REF_REGNAME_MAX);
             String respCode = RespPaySpec.truncate(responseCode != null ? responseCode : "00", RespPaySpec.REF_RESPCODE_MAX);
@@ -164,14 +168,14 @@ public class IsoToXmlConverter {
 
             return """
                 <ns2:ReqChkTxn xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                     <Txn id="%s" note="Status Check" custRef="%s" orgTxnId="%s" orgRrn="%s" type="VR" ts="%s"/>
                     <Payer addr="switch@bank" name="SWITCH" seqNum="1" type="ENTITY" code="0000">
                         <Amount value="%s" curr="INR"/>
                     </Payer>
                 </ns2:ReqChkTxn>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                     txnId, orgRrn != null ? orgRrn : "", orgTxnId != null ? orgTxnId : "", orgRrn != null ? orgRrn : "",
                     OffsetDateTime.now().format(HEAD_TS_FORMAT), amount
                 );
@@ -199,7 +203,7 @@ public class IsoToXmlConverter {
 
             return """
                 <ns2:RespChkTxn xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                     <Txn id="%s" note="Status Response" type="ChkBankStatus" ts="%s"/>
                     <Resp reqMsgId="%s" result="%s">
                         <Ref type="PAYEE" seqNum="1"
@@ -211,7 +215,7 @@ public class IsoToXmlConverter {
                     </Resp>
                 </ns2:RespChkTxn>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                     iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.getString(11), result,
                     amount, amount,
@@ -239,12 +243,12 @@ public class IsoToXmlConverter {
 
             return """
                 <upi:ReqHbt xmlns:upi="%s">
-                    <Head ver="1.0" ts="%s" orgId="SWITCH" msgId="%s"/>
+                    <Head ver="1.0" ts="%s" orgId="%s" msgId="%s"/>
                     <Txn id="%s" note="Heartbeat" refId="" refUrl="" ts="%s" type="Hbt"/>
                     <HbtMsg type="%s" value="NA"/>
                 </upi:ReqHbt>
                 """.formatted(
-                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId,
+                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId,
                     txnId, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     hbtType
                 );
@@ -271,12 +275,12 @@ public class IsoToXmlConverter {
 
             return """
                 <upi:RespHbt xmlns:upi="%s">
-                    <Head ver="1.0" ts="%s" orgId="SWITCH" msgId="%s"/>
+                    <Head ver="1.0" ts="%s" orgId="%s" msgId="%s"/>
                     <Txn id="%s" note="%s" refId="" refUrl="" ts="%s" type="Hbt"/>
                     <Resp reqMsgId="%s" result="%s"/>
                 </upi:RespHbt>
                 """.formatted(
-                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId,
+                    NAMESPACE, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId,
                     txnId, note, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.hasField(11) ? iso.getString(11) : "", result
                 );
@@ -308,7 +312,7 @@ public class IsoToXmlConverter {
 
             return """
                 <ns2:ReqValAdd xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                     <Txn id="%s" note="Name Enquiry" type="NameEnq" ts="%s"/>
                     <Payer addr="switch@bank" name="SWITCH" seqNum="1" type="ENTITY" code="0000"/>
                     <Payee seqNum="1" type="PERSON" code="0000">
@@ -320,7 +324,7 @@ public class IsoToXmlConverter {
                     </Payee>
                 </ns2:ReqValAdd>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                     txnId, OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     ifsc != null ? ifsc : "",
                     acNum != null ? acNum : ""
@@ -350,14 +354,14 @@ public class IsoToXmlConverter {
 
             return """
                 <ns2:RespValAdd xmlns:ns2="%s">
-                    <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                    <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                     <Txn id="%s" note="Name Enquiry Response" type="NameEnq" ts="%s"/>
                     <Resp reqMsgId="%s" result="%s"
                           IFSC="%s" acNum="%s" accType="DEFAULT"
                           approvalNum="%s" code="0000" type="PERSON"/>
                 </ns2:RespValAdd>
                 """.formatted(
-                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                    NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                     iso.getString(37), OffsetDateTime.now().format(HEAD_TS_FORMAT),
                     iso.getString(11), result,
                     ifsc != null ? ifsc : "",
@@ -384,13 +388,13 @@ public class IsoToXmlConverter {
 
         return """
             <ns2:RespListAccPvd xmlns:ns2="%s">
-                <Head ver="%s" ts="%s" orgId="SWITCH" msgId="%s" prodType="%s"/>
+                <Head ver="%s" ts="%s" orgId="%s" msgId="%s" prodType="%s"/>
                 <Txn type="ListAccPvd"/>
                 <Resp reqMsgId="%s" result="SUCCESS"/>
                 <AccPvdList/>
             </ns2:RespListAccPvd>
             """.formatted(
-                NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), msgId, PROD_TYPE,
+                NAMESPACE, API_VERSION, OffsetDateTime.now().format(HEAD_TS_FORMAT), RespPaySpec.truncate(responseOrgId, RespPaySpec.HEAD_ORGID_MAX), msgId, PROD_TYPE,
                 iso.getString(11)
             );
     }

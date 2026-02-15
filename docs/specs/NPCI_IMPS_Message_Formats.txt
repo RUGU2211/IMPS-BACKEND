@@ -1,10 +1,12 @@
-# NPCI IMPS Message Formats (Reference)
+NPCI IMPS Message Formats (Reference)
 
-This document is the **authoritative format** for IMPS API request/response bodies. All bodies in **SOCKET_GUIDE.md**, **IMPS_Req_API_Bodies.md**, the Postman collection, and the **project code** must follow these structures.
+
+This document is the authoritative format for IMPS API request/response bodies. All bodies in SOCKET_GUIDE.md, IMPS_Req_API_Bodies.md, the Postman collection, and the project code must follow these structures.
 
 ---
 
-## 6.1 ReqPay – Funds Transfer Request
+6.1 ReqPay – Funds Transfer Request
+
 
 ```xml
 <ns2:ReqPay xmlns:ns2="http://npci.org/upi/schema/"
@@ -109,7 +111,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## ReqPay – Acknowledgement
+ReqPay – Acknowledgement
+
 
 ```xml
 <ns2:Ack xmlns:ns2="http://npci.org/upi/schema/"
@@ -122,7 +125,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 6.2 RespPay – Credit Response
+6.2 RespPay – Credit Response
+
 
 ```xml
 <ns2:RespPay xmlns:upi="http://npci.org/upi/schema/">
@@ -167,7 +171,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## RespPay – Acknowledgement
+RespPay – Acknowledgement
+
 
 ```xml
 <ns2:Ack xmlns:ns2="http://npci.org/upi/schema/"
@@ -180,7 +185,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 7.1 ReqChkTxn – Check Status Request
+7.1 ReqChkTxn – Check Status Request
+
 
 ```xml
 <ns2:ReqChkTxn xmlns:upi="http://npci.org/upi/schema/">
@@ -265,7 +271,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## ReqChkTxn – Acknowledgement
+ReqChkTxn – Acknowledgement
+
 
 ```xml
 <ns2:Ack xmlns:ns2="http://npci.org/upi/schema/"
@@ -276,7 +283,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## RespChkTxn – Check Status Response
+RespChkTxn – Check Status Response
+
 
 ```xml
 <ns2:RespChkTxn xmlns:upi="http://npci.org/upi/schema/">
@@ -324,7 +332,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 8.1 ReqHbt – Heartbeat Request
+8.1 ReqHbt – Heartbeat Request
+
 
 ```xml
 <upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/">
@@ -346,7 +355,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## ReqHbt – Acknowledgement
+ReqHbt – Acknowledgement
+
 
 ```xml
 <ns2:Ack xmlns:ns2="http://npci.org/upi/schema/"
@@ -359,7 +369,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 8.2 RespHbt – Heartbeat Response
+8.2 RespHbt – Heartbeat Response
+
 
 ```xml
 <upi:RespHbt xmlns:upi="http://npci.org/upi/schema/">
@@ -382,7 +393,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## RespHbt – Acknowledgement
+RespHbt – Acknowledgement
+
 
 ```xml
 <ns2:Ack xmlns:ns2="http://npci.org/upi/schema/"
@@ -394,7 +406,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 9.1 ReqListAccPvd – List Providers Request
+9.1 ReqListAccPvd – List Providers Request
+
 
 ```xml
 <ns2:ReqListAccPvd xmlns:ns2="http://npci.org/upi/schema/">
@@ -415,7 +428,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## RespListAccPvd – List Providers Response
+RespListAccPvd – List Providers Response
+
 
 ```xml
 <ns2:RespListAccPvd xmlns:ns2="http://npci.org/upi/schema/">
@@ -438,7 +452,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## 10.1 ReqValAdd – Name Enquiry / Address Validation Request
+10.1 ReqValAdd – Name Enquiry / Address Validation Request
+
 
 ```xml
 <ns2:ReqValAdd xmlns:ns2="http://npci.org/upi/schema/"
@@ -488,7 +503,8 @@ This document is the **authoritative format** for IMPS API request/response bodi
 
 ---
 
-## RespValAdd – Name Enquiry Response
+RespValAdd – Name Enquiry Response
+
 
 ```xml
 <ns2:RespValAdd xmlns:ns2="http://npci.org/upi/schema/">

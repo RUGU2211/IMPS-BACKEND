@@ -30,6 +30,9 @@ public class MockResponseService {
 
     private static final Logger log = LoggerFactory.getLogger(MockResponseService.class);
 
+    @Value("${imps.enabled:true}")
+    private boolean impsEnabled;
+
     @Value("${imps.imps_ip:localhost}")
     private String impsIp;
 
@@ -78,7 +81,7 @@ public class MockResponseService {
             iso.setPackager(packager);
             iso.unpack(isoBytes);
 
-            System.out.println("[MOCK_SWITCH] Parsed ISO " + type + " MTI=" + iso.getMTI());
+            System.out.println("[SWITCH] Parsed ISO " + type + " MTI=" + iso.getMTI());
 
             return iso;
 
@@ -318,14 +321,18 @@ public class MockResponseService {
     }
 
     private void sendToBackend(ISOMsg iso, String endpoint, String type) {
+        if (!impsEnabled) {
+            log.info("[SWITCH] IMPS disabled (imps.enabled=false) – skipping forward to IMPS for {}", type);
+            return;
+        }
         try {
             byte[] packed = iso.pack();
             String respDisplay = formatIsoForConsole(packed);
-            log.info("[MOCK_SWITCH] ========== RESPONSE TO IMPS (HTTP) ==========");
-            log.info("[MOCK_SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, packed.length);
-            log.info("[MOCK_SWITCH] ISO response sent to IMPS:\n{}", respDisplay);
+            log.info("[SWITCH] ========== RESPONSE TO IMPS (HTTP) ==========");
+            log.info("[SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, packed.length);
+            log.info("[SWITCH] ISO response sent to IMPS:\n{}", respDisplay);
             System.out.println("==========================================");
-            System.out.println("[MOCK_SWITCH] RESPONSE TO IMPS (HTTP)");
+            System.out.println("[SWITCH] RESPONSE TO IMPS (HTTP)");
             System.out.println("Message Type: " + type + " | Endpoint: " + endpoint + " | Length: " + packed.length + " bytes");
             System.out.println("==========================================");
             System.out.println(respDisplay);
@@ -339,20 +346,20 @@ public class MockResponseService {
                 byte[].class
             );
             byte[] body = response.getBody();
-            log.info("[MOCK_SWITCH] ========== ACK FROM IMPS (HTTP) ==========");
-            log.info("[MOCK_SWITCH] Status: {} | Response Length: {} bytes", response.getStatusCode(), body != null ? body.length : 0);
+            log.info("[SWITCH] ========== ACK FROM IMPS (HTTP) ==========");
+            log.info("[SWITCH] Status: {} | Response Length: {} bytes", response.getStatusCode(), body != null ? body.length : 0);
             System.out.println("==========================================");
-            System.out.println("[MOCK_SWITCH] ACK FROM IMPS (HTTP)");
+            System.out.println("[SWITCH] ACK FROM IMPS (HTTP)");
             System.out.println("Status: " + response.getStatusCode() + " | Response Length: " + (body != null ? body.length : 0) + " bytes");
             System.out.println("==========================================");
             if (body != null && body.length > 0) {
                 String ackDisplay = formatIsoForConsole(body);
-                log.info("[MOCK_SWITCH] IMPS ACK (ISO) received:\n{}", ackDisplay);
-                System.out.println("[MOCK_SWITCH] IMPS ACK (ISO) received:");
+                log.info("[SWITCH] IMPS ACK (ISO) received:\n{}", ackDisplay);
+                System.out.println("[SWITCH] IMPS ACK (ISO) received:");
                 System.out.println(ackDisplay);
             }
         } catch (Exception e) {
-            log.error("[MOCK_SWITCH] Failed to send to IMPS Backend: {}", e.getMessage(), e);
+            log.error("[SWITCH] Failed to send to IMPS Backend: {}", e.getMessage(), e);
         }
     }
 
@@ -366,17 +373,16 @@ public class MockResponseService {
 
     /* ===============================
        SYNC RESPONSE (for socket – returns ISO bytes directly)
+       account_master is NOT updated here. Only the HTTP proxy path (flow 2: client → Switch → IMPS) updates switch_db.account_master.
        =============================== */
     public byte[] buildRespPaySync(byte[] reqIsoBytes, String txnId) {
         try {
             Thread.sleep(responseDelayMs);
             ISOMsg reqIso = unpack(reqIsoBytes);
             if (reqIso == null) return null;
-            log.info("[MOCK_SWITCH] Processing ReqPay - updating account_master (debit/credit)");
-            System.out.println("[MOCK_SWITCH] Processing ReqPay - updating account_master (debit/credit)");
-            String responseCode = accountLedgerService.debitAndCredit(reqIso);
-            log.info("[MOCK_SWITCH] Account ledger update completed with response code: {}", responseCode);
-            System.out.println("[MOCK_SWITCH] Account ledger update completed with response code: " + responseCode);
+            log.info("[SWITCH] ReqPay (socket from IMPS) - responding with 00, account_master NOT updated (only updated when request goes via Switch proxy)");
+            System.out.println("[SWITCH] ReqPay (socket from IMPS) - responding 00, account_master NOT updated (only via Switch proxy flow)");
+            String responseCode = "00";
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
             respIso.setMTI("0210");
@@ -388,7 +394,7 @@ public class MockResponseService {
             respIso.set(38, generateApprovalNumber()); respIso.set(39, responseCode);
             return respIso.pack();
         } catch (Exception e) {
-            log.error("[MOCK_SWITCH] buildRespPaySync error: {}", e.getMessage(), e);
+            log.error("[SWITCH] buildRespPaySync error: {}", e.getMessage(), e);
             return null;
         }
     }
@@ -473,11 +479,16 @@ public class MockResponseService {
             ISOMsg respIso = new ISOMsg();
             respIso.setPackager(packager);
             respIso.setMTI("0210");
-            copyField(reqIso, respIso, 3); copyField(reqIso, respIso, 37);
-            copyField(reqIso, respIso, 41); copyField(reqIso, respIso, 120);
-            respIso.set(11, generateStan()); respIso.set(12, LocalDateTime.now().format(TIME_FORMAT));
-            respIso.set(13, LocalDateTime.now().format(DATE_FORMAT)); respIso.set(39, "00");
-            respIso.set(48, "HDFC|ICICI|SBI|AXIS");
+            respIso.set(3, "320000");  // RespListAccPvd processing code
+            copyField(reqIso, respIso, 37);
+            copyField(reqIso, respIso, 41);
+            copyField(reqIso, respIso, 120);
+            respIso.set(11, generateStan());
+            respIso.set(12, LocalDateTime.now().format(TIME_FORMAT));
+            respIso.set(13, LocalDateTime.now().format(DATE_FORMAT));
+            respIso.set(39, "00");
+            respIso.set(49, "356");  // INR
+            respIso.set(48, "HDFC|ICICI|SBI|AXIS");  // AccPvd list (mock)
             return respIso.pack();
         } catch (Exception e) {
             log.warn("buildRespListAccPvdSync: {}", e.getMessage());
@@ -490,13 +501,17 @@ public class MockResponseService {
      * IMPS returns ISO ACK (application/octet-stream); we accept byte[] response.
      */
     public void forwardIsoToBackend(byte[] isoBytes, String endpoint, String type) {
+        if (!impsEnabled) {
+            log.info("[SWITCH] IMPS disabled (imps.enabled=false) – skipping forward to IMPS for {}", type);
+            return;
+        }
         try {
             String isoDisplay = formatIsoForConsole(isoBytes);
-            log.info("[MOCK_SWITCH] ========== FORWARDING RESPONSE TO IMPS (HTTP) ==========");
-            log.info("[MOCK_SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, isoBytes.length);
-            log.info("[MOCK_SWITCH] ISO being forwarded:\n{}", isoDisplay);
+            log.info("[SWITCH] ========== FORWARDING RESPONSE TO IMPS (HTTP) ==========");
+            log.info("[SWITCH] Message Type: {} | Endpoint: {} | Length: {} bytes", type, endpoint, isoBytes.length);
+            log.info("[SWITCH] ISO being forwarded:\n{}", isoDisplay);
             System.out.println("==========================================");
-            System.out.println("[MOCK_SWITCH] FORWARDING RESPONSE TO IMPS (HTTP)");
+            System.out.println("[SWITCH] FORWARDING RESPONSE TO IMPS (HTTP)");
             System.out.println("Message Type: " + type + " | Endpoint: " + endpoint + " | Length: " + isoBytes.length + " bytes");
             System.out.println("==========================================");
             System.out.println(isoDisplay);
@@ -510,18 +525,18 @@ public class MockResponseService {
                 byte[].class
             );
             byte[] isoAck = response.getBody();
-            log.info("[MOCK_SWITCH] Forwarded {} to IMPS Backend: {} | ACK Length: {} bytes", 
+            log.info("[SWITCH] Forwarded {} to IMPS Backend: {} | ACK Length: {} bytes", 
                 type, response.getStatusCode(), isoAck != null ? isoAck.length : 0);
-            System.out.println("[MOCK_SWITCH] Forwarded " + type + " to IMPS Backend: " + response.getStatusCode()
+            System.out.println("[SWITCH] Forwarded " + type + " to IMPS Backend: " + response.getStatusCode()
                 + (isoAck != null && isoAck.length > 0 ? " | ISO ACK received (" + isoAck.length + " bytes)" : ""));
             if (isoAck != null && isoAck.length > 0) {
                 String ackDisplay = formatIsoForConsole(isoAck);
-                log.info("[MOCK_SWITCH] IMPS ACK received:\n{}", ackDisplay);
-                System.out.println("[MOCK_SWITCH] IMPS ACK received:");
+                log.info("[SWITCH] IMPS ACK received:\n{}", ackDisplay);
+                System.out.println("[SWITCH] IMPS ACK received:");
                 System.out.println(ackDisplay);
             }
         } catch (Exception e) {
-            log.error("[MOCK_SWITCH] Forward to IMPS Backend failed: {}", e.getMessage(), e);
+            log.error("[SWITCH] Forward to IMPS Backend failed: {}", e.getMessage(), e);
         }
     }
 }

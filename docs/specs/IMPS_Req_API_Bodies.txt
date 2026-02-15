@@ -1,57 +1,59 @@
-# IMPS Request APIs – Copy-Paste Bodies with {placeholders}
+IMPS Request APIs – Copy-Paste Bodies with {placeholders}
 
-This doc covers **two flows only**: (1) **NPCI → IMPS** (XML request bodies below) and (2) **Switch → IMPS** (binary ISO; see [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md)).
 
-**Usage:** Copy the XML block, then replace each `{placeholder}` with your value. All IDs must be **35 chars** (3 BPC + 32).
+This doc covers two flows only: (1) NPCI → IMPS (XML request bodies below) and (2) Switch → IMPS (binary ISO; see SOCKET_GUIDE.txt (../socket/SOCKET_GUIDE.txt)).
 
-**Paths:** `{baseUrl}/imps/{reqtype}/{txnId}` — e.g. `https://192.168.1.38:8443/imps/reqpay/{txnId}`  
-**Content-Type:** `application/xml` for NPCI → IMPS. For Switch → IMPS (ISO): `application/octet-stream` and binary ISO 8583 (no XML body; see socket guide).
+Usage: Copy the XML block, then replace each {placeholder} with your value. All IDs must be 35 chars (3 BPC + 32).
 
-**Source:** [NPCI_IMPS_Message_Formats.md](NPCI_IMPS_Message_Formats.md) | [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md)
+Paths: {baseUrl}/imps/{reqtype}/{txnId} — e.g. https://192.168.1.38:8443/imps/reqpay/{txnId}  
+Content-Type: application/xml for NPCI → IMPS. For Switch → IMPS (ISO): application/octet-stream and binary ISO 8583 (no XML body; see socket guide).
 
----
-
-## Placeholder reference
-
-| Placeholder | Example | Description |
-|-------------|---------|-------------|
-| `{baseUrl}` | https://192.168.1.38:8443 | IMPS REST base URL (HTTPS, port 8443 with ssl profile) |
-| `{orgId}` | BANK01 | Organisation ID (3–20 chars) |
-| `{msgId}` | BAN5t2Dk18UFMIMFENLBga12345678901234 | Head msgId, 35 chars |
-| `{txnId}` | BAN5t2Dk18UFMIMFENLBgb12345678901234 | Txn id, 35 chars |
-| `{ts}` | 2026-01-25T10:30:00.000+05:30 | ISO timestamp |
-| `{payerAcNum}` | 1234567890123456 | Payer account number |
-| `{payerIfsc}` | HDFC0000001 | Payer IFSC |
-| `{payerName}` | Rugved Kharde | Payer verified name |
-| `{payerMobile}` | 919494916511 | Payer mobile |
-| `{payeeAcNum}` | 1111222233334444 | Payee account number |
-| `{payeeIfsc}` | ICIC0000001 | Payee IFSC |
-| `{amount}` | 1000.00 | Amount in INR |
-| `{custRef}` | 023113001276 | Customer reference |
-| `{refId}` | 001276 | Reference ID |
-| `{orgTxnId}` | BAN5t2Dk18UFMIMG40acxy12345678901234 | Original txn id (ChkTxn) |
-| `{orgRrn}` | 023113001279 | Original RRN |
-| `{orgTxnDate}` | 2026-01-25T10:43:31.000+05:30 | Original txn date |
-| `{initiationMode}` | 00 | 00=Default, 12=FIR |
-| `{mmid}` | 4002111 | MMID (ValAdd) |
-| `{mobNum}` | 919494916511 | Mobile number (ValAdd) |
+Source: NPCI_IMPS_Message_Formats.md (NPCI_IMPS_Message_Formats.txt) | SOCKET_GUIDE.md (../socket/SOCKET_GUIDE.txt)
 
 ---
 
-## Two flows (aligned with Postman)
+Placeholder reference
 
-| Flow | Direction | Body | Path pattern |
-|------|-----------|------|--------------|
-| **NPCI - IMPS req flow** | NPCI → IMPS | XML (copy-paste from sections below) | `{baseUrl}/imps/{reqpay,reqchktxn,reqhbt,reqlistaccpvd,reqvaladd}/{txnId}` |
-| **Switch - IMPS flow** | Switch → IMPS | Binary ISO 8583 | Same path; `Content-Type: application/octet-stream`. See [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.md). |
 
-Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS req flow* and *Switch - IMPS flow* only.
+Placeholder  Example  Description
+`{baseUrl}`  https://192.168.1.38:8443  IMPS REST base URL (HTTPS, port 8443 with ssl profile)
+`{orgId}`  BANK01  Organisation ID (3–20 chars)
+`{msgId}`  BAN5t2Dk18UFMIMFENLBga12345678901234  Head msgId, 35 chars
+`{txnId}`  BAN5t2Dk18UFMIMFENLBgb12345678901234  Txn id, 35 chars
+`{ts}`  2026-01-25T10:30:00.000+05:30  ISO timestamp
+`{payerAcNum}`  1234567890123456  Payer account number
+`{payerIfsc}`  HDFC0000001  Payer IFSC
+`{payerName}`  Rugved Kharde  Payer verified name
+`{payerMobile}`  919494916511  Payer mobile
+`{payeeAcNum}`  1111222233334444  Payee account number
+`{payeeIfsc}`  ICIC0000001  Payee IFSC
+`{amount}`  1000.00  Amount in INR
+`{custRef}`  023113001276  Customer reference
+`{refId}`  001276  Reference ID
+`{orgTxnId}`  BAN5t2Dk18UFMIMG40acxy12345678901234  Original txn id (ChkTxn)
+`{orgRrn}`  023113001279  Original RRN
+`{orgTxnDate}`  2026-01-25T10:43:31.000+05:30  Original txn date
+`{initiationMode}`  00  00=Default, 12=FIR
+`{mmid}`  4002111  MMID (ValAdd)
+`{mobNum}`  919494916511  Mobile number (ValAdd)
 
 ---
 
-## ReqPay – P2A Fund Transfer (NPCI → IMPS)
+Two flows (aligned with Postman)
 
-**Path:** `{baseUrl}/imps/reqpay/{txnId}`
+
+Flow  Direction  Body  Path pattern
+**NPCI - IMPS req flow**  NPCI → IMPS  XML (copy-paste from sections below)  `{baseUrl}/imps/{reqpay,reqchktxn,reqhbt,reqlistaccpvd,reqvaladd}/{txnId}`
+**Switch - IMPS flow**  Switch → IMPS  Binary ISO 8583  Same path; `Content-Type: application/octet-stream`. See [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.txt).
+
+Postman collection: IMPS API Collection (Dynamic) — folders *NPCI - IMPS req flow* and *Switch - IMPS flow* only.
+
+---
+
+ReqPay – P2A Fund Transfer (NPCI → IMPS)
+
+
+Path: {baseUrl}/imps/reqpay/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -96,9 +98,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqPay – P2P (Chetan to Madhav)
+ReqPay – P2P (Chetan to Madhav)
 
-**Path:** `{baseUrl}/imps/reqpay/{txnId}`
+
+Path: {baseUrl}/imps/reqpay/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -143,9 +146,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqPay – FIR (Foreign Inward Remittance)
+ReqPay – FIR (Foreign Inward Remittance)
 
-**Path:** `{baseUrl}/imps/reqpay/{txnId}` — `{initiationMode}` = 12
+
+Path: {baseUrl}/imps/reqpay/{txnId} — {initiationMode} = 12
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -198,9 +202,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqPay – CREDIT (NPCI to Beneficiary Bank)
+ReqPay – CREDIT (NPCI to Beneficiary Bank)
 
-**Path:** `{baseUrl}/imps/reqpay/{txnId}` — Head orgId = NPCI, Txn type = CREDIT
+
+Path: {baseUrl}/imps/reqpay/{txnId} — Head orgId = NPCI, Txn type = CREDIT
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -245,9 +250,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqChkTxn – Check Status Request
+ReqChkTxn – Check Status Request
 
-**Path:** `{baseUrl}/imps/reqchktxn/{txnId}`
+
+Path: {baseUrl}/imps/reqchktxn/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -290,9 +296,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqHbt – Heartbeat ALIVE
+ReqHbt – Heartbeat ALIVE
 
-**Path:** `{baseUrl}/imps/reqhbt/{txnId}`
+
+Path: {baseUrl}/imps/reqhbt/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -305,9 +312,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqHbt – Heartbeat EOD
+ReqHbt – Heartbeat EOD
 
-**Path:** `{baseUrl}/imps/reqhbt/{txnId}`
+
+Path: {baseUrl}/imps/reqhbt/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -320,9 +328,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqListAccPvd – List Providers
+ReqListAccPvd – List Providers
 
-**Path:** `{baseUrl}/imps/reqlistaccpvd/{txnId}`
+
+Path: {baseUrl}/imps/reqlistaccpvd/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -334,9 +343,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqValAdd – Name Enquiry (NameEnq)
+ReqValAdd – Name Enquiry (NameEnq)
 
-**Path:** `{baseUrl}/imps/reqvaladd/{txnId}`
+
+Path: {baseUrl}/imps/reqvaladd/{txnId}
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -374,9 +384,10 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## ReqValAdd – Address Validation (ValAdd)
+ReqValAdd – Address Validation (ValAdd)
 
-**Path:** `{baseUrl}/imps/reqvaladd/{txnId}` — Txn type = ValAdd
+
+Path: {baseUrl}/imps/reqvaladd/{txnId} — Txn type = ValAdd
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -414,7 +425,8 @@ Postman collection: **IMPS API Collection (Dynamic)** — folders *NPCI - IMPS r
 
 ---
 
-## Quick fill example
+Quick fill example
+
 
 ```
 {baseUrl}     = https://192.168.1.38:8443

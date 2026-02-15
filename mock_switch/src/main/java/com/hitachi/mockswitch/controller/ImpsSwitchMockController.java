@@ -74,20 +74,20 @@ public class ImpsSwitchMockController {
     public String reqpay(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQPAY");
         String isoDisplay = formatIsoForConsole(isoBytes);
-        log.info("[MOCK_SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
-        log.info("[MOCK_SWITCH] Message Type: ReqPay | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
-        log.info("[MOCK_SWITCH] ISO received from IMPS:\n{}", isoDisplay);
+        log.info("[SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
+        log.info("[SWITCH] Message Type: ReqPay | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
+        log.info("[SWITCH] ISO received from IMPS:\n{}", isoDisplay);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] REQUEST FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] REQUEST FROM IMPS (HTTP)");
         System.out.println("Message Type: ReqPay | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQPAY");
         if (isoMsg != null) {
             ValidationService.ValidationResult vr = validationService.validateReqPay(isoMsg);
-            System.out.println("[MOCK_SWITCH] Validation: " + (vr.isValid() ? "VALID" : "INVALID"));
+            System.out.println("[SWITCH] Validation: " + (vr.isValid() ? "VALID" : "INVALID"));
         }
-        System.out.println("[MOCK_SWITCH] Processing ReqPay - will update account_master and send response");
+        System.out.println("[SWITCH] Processing ReqPay - will update account_master and send response");
         responseService.sendRespPayAsync(isoBytes, txnId);
         return buildAck("ReqPay");
     }
@@ -96,11 +96,11 @@ public class ImpsSwitchMockController {
     public String reqchktxn(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQCHKTXN");
         String isoDisplay = formatIsoForConsole(isoBytes);
-        log.info("[MOCK_SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
-        log.info("[MOCK_SWITCH] Message Type: ReqChkTxn | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
-        log.info("[MOCK_SWITCH] ISO received from IMPS:\n{}", isoDisplay);
+        log.info("[SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
+        log.info("[SWITCH] Message Type: ReqChkTxn | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
+        log.info("[SWITCH] ISO received from IMPS:\n{}", isoDisplay);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] REQUEST FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] REQUEST FROM IMPS (HTTP)");
         System.out.println("Message Type: ReqChkTxn | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
@@ -115,11 +115,11 @@ public class ImpsSwitchMockController {
     public String reqlistaccpvd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQLISTACCPVD");
         String isoDisplay = formatIsoForConsole(isoBytes);
-        log.info("[MOCK_SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
-        log.info("[MOCK_SWITCH] Message Type: ReqListAccPvd | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
-        log.info("[MOCK_SWITCH] ISO received from IMPS:\n{}", isoDisplay);
+        log.info("[SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
+        log.info("[SWITCH] Message Type: ReqListAccPvd | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
+        log.info("[SWITCH] ISO received from IMPS:\n{}", isoDisplay);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] REQUEST FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] REQUEST FROM IMPS (HTTP)");
         System.out.println("Message Type: ReqListAccPvd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
@@ -132,16 +132,16 @@ public class ImpsSwitchMockController {
     public String reqvaladd(@PathVariable String txnId, @RequestBody byte[] body, HttpServletRequest request) {
         byte[] isoBytes = resolveBody(body, request.getContentType(), "REQVALADD");
         String isoDisplay = formatIsoForConsole(isoBytes);
-        log.info("[MOCK_SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
-        log.info("[MOCK_SWITCH] Message Type: ReqValAdd | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
-        log.info("[MOCK_SWITCH] ISO received from IMPS:\n{}", isoDisplay);
+        log.info("[SWITCH] ========== REQUEST FROM IMPS (HTTP) ==========");
+        log.info("[SWITCH] Message Type: ReqValAdd | TxnId: {} | Length: {} bytes", txnId, isoBytes.length);
+        log.info("[SWITCH] ISO received from IMPS:\n{}", isoDisplay);
         System.out.println("==========================================");
-        System.out.println("[MOCK_SWITCH] REQUEST FROM IMPS (HTTP)");
+        System.out.println("[SWITCH] REQUEST FROM IMPS (HTTP)");
         System.out.println("Message Type: ReqValAdd | TxnId: " + txnId + " | Length: " + isoBytes.length + " bytes");
         System.out.println("==========================================");
         System.out.println(isoDisplay);
         ISOMsg isoMsg = responseService.logIsoMessage(isoBytes, "REQVALADD");
-        System.out.println("[MOCK_SWITCH] Processing ReqValAdd - will query account_master and send response");
+        System.out.println("[SWITCH] Processing ReqValAdd - will query account_master and send response");
         responseService.sendRespValAddAsync(isoBytes, txnId);
         return buildAck("ReqValAdd");
     }

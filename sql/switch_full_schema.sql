@@ -18,7 +18,6 @@
 -- PART 1: DROP ALL TABLES (reverse order of creation)
 -- ============================================
 DROP TABLE IF EXISTS audit_log CASCADE;
-DROP TABLE IF EXISTS iso_field_mapping CASCADE;
 DROP TABLE IF EXISTS account_master CASCADE;
 
 -- ============================================

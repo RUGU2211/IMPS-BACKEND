@@ -10,10 +10,11 @@ import java.util.Map;
 import org.jpos.iso.ISOException;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.entity.InstitutionMaster;
 import com.hitachi.imps.entity.TransactionEntity;
 import com.hitachi.imps.iso.ImpsIsoPackager;
@@ -35,13 +36,23 @@ import com.hitachi.imps.converter.IsoToXmlConverter;
 @Service
 public class ReqHbtService {
 
-    private static final String STATUS_SUMMARY = "(ReqPay/ReqChkTxn/ReqValAdd require switch on port 9084)";
+    @Value("${imps.org-id:BANK01}")
+    private String orgId;
+
+    @Value("${imps.routing.switch-default-host:localhost}")
+    private String switchDefaultHost;
+    @Value("${imps.routing.switch-default-port:9084}")
+    private String switchDefaultPort;
+
+    private String getStatusSummary() {
+        return "(ReqPay/ReqChkTxn/ReqValAdd require switch on port " + switchDefaultPort + ")";
+    }
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HHmmss");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("MMdd");
     /** Rule 020: Head/Txn ts = ISO with up to 3 fractional seconds. */
     private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -82,9 +93,10 @@ public class ReqHbtService {
         Map<String, String> hbt = xmlParsingService.parseReqHbt(xml);
         String respMsgId = ResponseIdHelper.responseMsgIdFromRequest(msgId);
         String txnTs = (hbt.get("txn_ts") != null && !hbt.get("txn_ts").isBlank()) ? hbt.get("txn_ts") : OffsetDateTime.now().format(HEAD_TS_FORMAT);
+        String respOrgId = com.hitachi.imps.converter.RespPaySpec.truncate(orgId, com.hitachi.imps.converter.RespPaySpec.HEAD_ORGID_MAX);
         String respXml = String.format(
-            "<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\"><Head ver=\"1.0\" ts=\"%s\" orgId=\"BANK01\" msgId=\"%s\"/><Txn id=\"%s\" note=\"%s\" refId=\"%s\" refUrl=\"\" ts=\"%s\" type=\"Hbt\"/><Resp reqMsgId=\"%s\" result=\"%s\"/></upi:RespHbt>",
-            OffsetDateTime.now().format(HEAD_TS_FORMAT), respMsgId, txnId != null ? txnId : "", escapeXml(note),
+            "<upi:RespHbt xmlns:upi=\"http://npci.org/upi/schema/\"><Head ver=\"1.0\" ts=\"%s\" orgId=\"%s\" msgId=\"%s\"/><Txn id=\"%s\" note=\"%s\" refId=\"%s\" refUrl=\"\" ts=\"%s\" type=\"Hbt\"/><Resp reqMsgId=\"%s\" result=\"%s\"/></upi:RespHbt>",
+            OffsetDateTime.now().format(HEAD_TS_FORMAT), respOrgId, respMsgId, txnId != null ? txnId : "", escapeXml(note),
             hbt.get("ref_id") != null ? hbt.get("ref_id") : "", txnTs, msgId, result);
         auditService.saveRaw(txnId, "NPCI_RESPHBT_XML_OUT", respXml);
         if ("FAILURE".equals(result)) {
@@ -93,7 +105,7 @@ public class ReqHbtService {
             transactionService.markSuccess(txn, respXml, null, null);
         }
         if (sendToNpci(txnId, respXml)) return;
-        try { npciMockClient.sendRespHbt(respXml); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespHbt(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
     }
 
     /** Switch → IMPS: receive ReqHbt ISO, return RespHbt ISO with same bank status logic. Logs to transaction and message_audit_log. */
@@ -176,8 +188,8 @@ public class ReqHbtService {
     private void logDownBanksToConsole(BankStatus status) {
         if (status.downInstitutions == null || status.downInstitutions.isEmpty()) return;
         for (InstitutionMaster inst : status.downInstitutions) {
-            String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : "localhost";
-            String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : "9084";
+            String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : switchDefaultHost;
+            String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : switchDefaultPort;
             System.out.println("[IMPS] Switch connection FAILED (institution_master): id=" + inst.getId()
                 + " name=\"" + (inst.getName() != null ? inst.getName() : "") + "\""
                 + " request_org_id=" + (inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "")
@@ -224,12 +236,12 @@ public class ReqHbtService {
         return name + " (" + orgId + ")";
     }
 
-    private static String buildBankStatusNote(int upCount, int downCount, List<String> upBanks, List<String> downBanks) {
+    private String buildBankStatusNote(int upCount, int downCount, List<String> upBanks, List<String> downBanks) {
         StringBuilder sb = new StringBuilder();
         sb.append("Complete: ").append(upCount).append(" UP, ").append(downCount).append(" DOWN. ");
         if (!upBanks.isEmpty()) sb.append("UP: ").append(String.join(", ", upBanks)).append(". ");
         if (!downBanks.isEmpty()) sb.append("DOWN: ").append(String.join(", ", downBanks)).append(". ");
-        sb.append(STATUS_SUMMARY);
+        sb.append(getStatusSummary());
         return sb.toString();
     }
 

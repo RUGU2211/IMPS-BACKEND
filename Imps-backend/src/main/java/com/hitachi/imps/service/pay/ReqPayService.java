@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.client.switchclient.ISwitchClient;
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.util.IsoUtil;
@@ -36,7 +36,7 @@ public class ReqPayService {
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private IsoToXmlConverter isoToXmlConverter;
     @Autowired private ISwitchClient switchClient;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -88,7 +88,7 @@ public class ReqPayService {
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciMockClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             return;
         }
 
@@ -96,14 +96,14 @@ public class ReqPayService {
         String requestOrgId = xmlParsingService.extractOrgId(xml);
         if (switchAddressResolver.isBankDown(requestOrgId)) {
             var downOpt = switchAddressResolver.findDownInstitution(requestOrgId);
-            downOpt.ifPresent(SwitchAddressResolver::logFailedSwitchToConsole);
-            String errMsg = downOpt.map(SwitchAddressResolver::buildBankDownErrMsg).orElse("Bank switch unreachable. Transaction failed.");
+            downOpt.ifPresent(switchAddressResolver::logFailedSwitchToConsole);
+            String errMsg = downOpt.map(switchAddressResolver::buildBankDownErrMsg).orElse("Bank switch unreachable. Transaction failed.");
             TransactionEntity txn = transactionService.createRequest(txnId, xml);
             String errResp = ackService.buildFailureRespPay(msgId, "BANK_DOWN", errMsg);
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciMockClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             return;
         }
 
@@ -129,7 +129,7 @@ public class ReqPayService {
             String approvalNum = extractApprovalNum(response);
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciMockClient.sendRespPay(respXml, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
         } else {
             transactionService.markFailure(txn, null);
             String errAck = ackService.buildAckWithFallback("RespPay", msgId, txnId);
@@ -215,11 +215,14 @@ public class ReqPayService {
         if (iso.hasField(13)) txn.setDe13(iso.getString(13));
         transactionService.markIsoSent(txn);
 
+        System.out.println("========== [IMPS] IMPS → NPCI | REQ sent | ReqPay (XML) ==========");
+        System.out.println("  REQ sent to: NPCI | TxnId: " + txnId);
         String respXml;
+        long tNpci = System.currentTimeMillis();
         try {
-            respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqPay(reqXml, txnId) : npciMockClient.sendReqPay(reqXml);
+            respXml = (txnId != null && !txnId.isBlank()) ? npciRestClient.sendReqPay(reqXml, txnId) : npciRestClient.sendReqPay(reqXml);
         } catch (Exception e) {
-            System.err.println("NPCI Mock Client not available: " + e.getMessage());
+            System.err.println("NPCI not available: " + e.getMessage());
             transactionService.markFailure(txn, null);
             return null;
         }
@@ -227,7 +230,12 @@ public class ReqPayService {
             transactionService.markFailure(txn, null);
             return null;
         }
-
+        long npciRoundtripMs = System.currentTimeMillis() - tNpci;
+        System.out.println("========== [IMPS] NPCI → IMPS | RESP received | RespPay (XML) ==========");
+        System.out.println("  RESP received from: NPCI | TxnId: " + txnId + " | connection will close");
+        System.out.println("========= PERFORMANCE =========");
+        System.out.println("NPCI Roundtrip: " + npciRoundtripMs + "ms");
+        System.out.println("===============================");
         auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_IN", respXml);
         try {
             ISOMsg respIso = xmlToIsoConverter.convertRespPay(respXml);
@@ -235,6 +243,7 @@ public class ReqPayService {
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPPAY_ISO_OUT", respBytes);
+            System.out.println("[IMPS] ReqPay complete: transaction + message_audit_log updated");
             return respBytes;
         } catch (Exception e) {
             System.err.println("IMPS: RespPay XML to ISO failed: " + e.getMessage());

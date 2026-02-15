@@ -5,13 +5,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.jpos.iso.ISOMsg;
 
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.converter.XmlToIsoConverter;
 import com.hitachi.imps.entity.InstitutionMaster;
 import com.hitachi.imps.util.IsoUtil;
@@ -29,12 +30,15 @@ import com.hitachi.imps.spec.AccPvdSpec;
 @Service
 public class ReqListAccPvdService {
 
+    @Value("${imps.org-id:BANK01}")
+    private String orgId;
+
     private static final String UNKNOWN_TXN = "UNKNOWN";
     /** Rule 020: Head ts = ISO with up to 3 fractional seconds. */
     private static final DateTimeFormatter HEAD_TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
 
     @Autowired private InstitutionMasterRepository institutionRepo;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
@@ -69,7 +73,7 @@ public class ReqListAccPvdService {
         auditService.saveRaw(txnId, "NPCI_RESPLISTACCPVD_XML_OUT", respXml);
         transactionService.markSuccess(txn, respXml, null, null);  // SUCCESS when resp sent to NPCI
         if (sendToNpci(txnId, respXml)) return;
-        try { npciMockClient.sendRespListAccPvd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespListAccPvd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
     }
 
     private boolean sendToNpci(String txnId, String respXml) {
@@ -130,7 +134,8 @@ public class ReqListAccPvdService {
         }
         String respMsgId = ResponseIdHelper.responseMsgIdFromRequest(reqMsgId);
         String ts = OffsetDateTime.now().format(HEAD_TS_FORMAT);
-        return "<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"BANK01\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn type=\"ListAccPvd\"/><Resp reqMsgId=\"" + escapeXml(reqMsgId) + "\" result=\"SUCCESS\"/><AccPvdList>" + accList + "</AccPvdList></ns2:RespListAccPvd>";
+        String orgIdTrunc = com.hitachi.imps.converter.RespPaySpec.truncate(orgId, com.hitachi.imps.converter.RespPaySpec.HEAD_ORGID_MAX);
+        return "<ns2:RespListAccPvd xmlns:ns2=\"http://npci.org/upi/schema/\"><Head ver=\"2.0\" ts=\"" + ts + "\" orgId=\"" + escapeXml(orgIdTrunc) + "\" msgId=\"" + respMsgId + "\" prodType=\"IMPS\"/><Txn type=\"ListAccPvd\"/><Resp reqMsgId=\"" + escapeXml(reqMsgId) + "\" result=\"SUCCESS\"/><AccPvdList>" + accList + "</AccPvdList></ns2:RespListAccPvd>";
     }
 
     private static String escapeXml(String s) {

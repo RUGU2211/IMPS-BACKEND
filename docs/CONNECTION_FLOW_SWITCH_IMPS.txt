@@ -1,0 +1,57 @@
+Connection Flow: Switch → IMPS → NPCI (REST / HTTP)
+
+
+Overview
+--------
+When a request goes Switch → IMPS → NPCI (e.g. ReqPay from client as Switch via Switch proxy), three logical connections are involved. Console logs on all three apps show flow direction (e.g. Client (as Switch) → IMPS, IMPS → NPCI) so you can trace the flow.
+
+
+Connection 1: Switch ↔ IMPS
+----------------------------
+- Client (as Switch) sends REQ (e.g. ReqPay ISO) to IMPS on one HTTP connection.
+- IMPS receives the REQ on the same connection ([CONN 1] REQ received from Switch).
+- IMPS processes the request (see Connection 2).
+- IMPS sends RESP (e.g. RespPay ISO) back to Switch on the same connection ([CONN 3] RESP sent to Switch).
+- Switch receives the RESP and sends ACK (HTTP 200 with body); then the connection closes.
+
+Console:
+  [SWITCH] Client (as Switch) → IMPS | REQ received from Client (as Switch) | REQ sent to IMPS
+  [IMPS]   Switch → IMPS | REQ received from Switch
+  ... (Connection 2 happens inside IMPS) ...
+  [IMPS]   IMPS → Switch | RESP sent to Switch
+  [SWITCH] IMPS → Client (as Switch) | RESP received from IMPS | RESP sent to Client (as Switch) | connection will close
+
+
+Connection 2: IMPS ↔ NPCI
+-------------------------
+- On the same thread handling Connection 1, IMPS opens an HTTP connection to NPCI.
+- IMPS sends REQ (e.g. ReqPay XML) to NPCI ([CONN 2] REQ sent to NPCI).
+- NPCI receives the REQ on that connection ([CONN 2] REQ received from IMPS).
+- NPCI sends RESP (e.g. RespPay XML) to IMPS on the same connection ([CONN 2] RESP sent to IMPS).
+- IMPS receives the RESP ([CONN 2] RESP received from NPCI); the HTTP response body is the ACK (response received); then the connection to NPCI closes.
+
+Console:
+  [IMPS] [CONN 2] REQ sent to NPCI
+  [NPCI] [CONN 2] REQ received from IMPS | REQ ACK (HTTP 200 + body) – same connection
+  [NPCI] [CONN 2] RESP sent to IMPS | IMPS will ACK then connection close
+  [IMPS] [CONN 2] RESP received from NPCI | ACK (implicit in HTTP response) – connection to NPCI will close
+
+
+Connection 3: IMPS → Switch (response leg)
+------------------------------------------
+- Connection 3 is the response leg of Connection 1: IMPS sends the response (e.g. RespPay ISO) back to Switch on the same HTTP connection on which Switch sent the request.
+- Switch receives the response and returns HTTP 200 with the response body (ACK); then the connection closes.
+
+So:
+  CONN 1 = Switch → IMPS (request)
+  CONN 2 = IMPS → NPCI (request + response on one HTTP round trip)
+  CONN 3 = IMPS → Switch (response on same connection as CONN 1)
+
+
+Summary
+-------
+1. Connection 1: Switch sends REQ to IMPS; IMPS sends ACK (implicit when it returns the full response).
+2. Connection 2: IMPS sends REQ to NPCI; NPCI sends REQ ACK (HTTP 200 + body); NPCI sends RESP to IMPS on same connection; IMPS receives RESP (ACK implicit in HTTP); connection closes.
+3. Connection 3: IMPS sends RESP to Switch on Connection 1; Switch sends ACK (HTTP 200); connection closes.
+
+All request/response and connection-close behaviour is visible in console logs with [CONN 1], [CONN 2], [CONN 3] and [SWITCH], [IMPS], [NPCI] prefixes.

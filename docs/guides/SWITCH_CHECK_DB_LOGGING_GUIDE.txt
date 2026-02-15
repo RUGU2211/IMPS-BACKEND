@@ -1,0 +1,55 @@
+Switch Check (Auto HBT) – DB Logging Guide
+
+
+How Manual ReqHbt Logs to Tables
+
+
+transaction table
+
+Step  Method  Columns populated
+1  `createRequest(txnId, reqXml, "HBT")`  txn_id, txn_type=HBT, req_xml, req_in_date_time, switch_status=INIT
+2  `markSuccess(txn, respXml, null, null)` or `markFailure(txn, respXml)`  switch_status (SUCCESS/FAILED), resp_xml, resp_in_date_time, resp_out_date_time
+
+message_audit_log table
+
+Stage  Method  Columns
+NPCI_REQHBT_XML_IN  `saveRaw(txnId, stage, xml)`  txn_id, stage, raw_message
+NPCI_RESPHBT_XML_OUT  `saveRaw(txnId, stage, respXml)`  txn_id, stage, raw_message
+SWITCH_REQHBT_ISO_IN  `saveRawBytesWithParsed(txnId, stage, isoBytes)`  txn_id, stage, raw_message (BASE64), parsed_message
+SWITCH_RESPHBT_ISO_OUT  `saveRawBytesWithParsed(...)`  same
+
+---
+
+Data Plan for Auto Switch Check (Every 3 min)
+
+
+transaction table
+
+Column  Value
+txn_id  `SWITCH_CHECK_` + yyyyMMddHHmmss (e.g. SWITCH_CHECK_20260206120530)
+txn_type  `SWITCH_CHECK`
+req_xml  JSON: `{"banks":[{"id", "name", "request_org_id", "switch_ip", "switch_port"}], "checked_at":"..."}`
+resp_xml  JSON: `{"up_count", "down_count", "up_banks":[...], "down_banks":[...], "contact_details":{...}, "overall_status":"SUCCESS\  FAILED"}`
+switch_status  SUCCESS (all UP) or FAILED (any DOWN)
+req_in_date_time  Check start timestamp
+resp_out_date_time  Check complete timestamp
+
+message_audit_log table
+
+Column  Value
+txn_id  Same as transaction
+stage  `SWITCH_CHECK_RESULT`
+raw_message  Full JSON result (same as resp_xml)
+parsed_message  null
+created_at  LocalDateTime.now()
+
+---
+
+Flow
+
+
+1. HeartbeatSchedulerService runs every 3 min
+2. For each institution: TCP connect, update institution_master.active
+3. Build JSON req (banks to check) and JSON resp (result with up/down + contact details)
+4. Call TransactionService to create + markSuccess/markFailure
+5. Call MessageAuditService.saveRaw for SWITCH_CHECK_RESULT

@@ -1,8 +1,16 @@
 # ===========================================
 # IMPS BACKEND – Application Configuration
 # ===========================================
-# HTTP (default): server.port 8081
-# HTTPS: run with --spring.profiles.active=ssl → server.port 8443 (run certs/generate-certs.bat first)
+#
+# CONNECTION PORTS (simple reference)
+# -----------------------------------
+#   IMPS:    HTTP 8081   HTTPS 8443   Socket TCP 9083   Socket TLS 9443
+#   Switch:  HTTP 8082   HTTPS 8444   TCP 9084          TLS 9444
+#   NPCI:    HTTP 8083   HTTPS 8445   TCP 9085          TLS 9445
+# Default: socket uses TLS (ssl.enabled: true). Postman: HTTPS → https://192.168.1.38:8443/imps/reqpay/{{txnId}}
+#
+# For local dev with mocks: parent folder may contain mock_npci, mock_switch. Not required for production.
+# Run: mvn spring-boot:run → HTTPS (ssl is default). For HTTP: -Dspring.profiles.active=default
 #
 # CONNECTION FLOW EXPLANATION:
 # ===========================================
@@ -22,6 +30,16 @@
 #
 # IMPORTANT: Each connection is opened, used, and closed immediately after use.
 # Connections are NOT reused - new connection is opened for each message exchange.
+#
+# DEPLOYMENT WITH ACTUAL SWITCH AND NPCI
+# --------------------------------------
+# IMPS-backend is independent: it has no dependency on mock_switch or mock_npci.
+# For production, set the following to your actual Switch and NPCI endpoints:
+#   routing.switch.socket.host / port / ssl-enabled / trust-store  → actual Switch
+#   routing.npci.base-url (if NPCI uses REST)                       → actual NPCI REST base URL
+#   npci.socket.host / port (for outbound response to NPCI)         → actual NPCI socket
+#   institution_master.switch_ip, switch_port (per bank)            → actual bank switch addresses
+# Optional: set imps.heartbeat.switch-check-enabled: false if real Switch does not expose the same port for health checks.
 # ===========================================
 
 # ===========================================
@@ -33,6 +51,9 @@ server:
 spring:
   application:
     name: Imps-backend
+  # Default profile: ssl (HTTPS). Use -Dspring.profiles.active= (empty) or "default" for HTTP only.
+  profiles:
+    active: ssl
   datasource:
     url: jdbc:postgresql://localhost:5432/imps_db
     username: postgres
@@ -74,22 +95,23 @@ npci:
 # ===========================================
 # ROUTING CONFIGURATION
 # ===========================================
-# Defines how IMPS routes messages between NPCI and Switch
+# Defines how IMPS routes messages between NPCI and Switch. Set to actual host/port for production.
 # ===========================================
 routing:
-  # NPCI Routing (for REST fallback - not used when npci.compliant-flow: true)
+  # NPCI REST (used when NPCI sends request via HTTP; ACK and responses go to this base-url)
   npci:
-    base-url: http://localhost:8083  # NPCI Mock REST endpoint (fallback)
+    base-url: http://localhost:8083  # For dev: mock. For production: actual NPCI REST base URL
     endpoints:
       ack: /npci/ack
   
-  # Switch Routing
+  # Switch Routing (socket: IMPS → Switch outbound; set host/port to actual Switch for production)
   switch:
-    base-url: http://localhost:8082
+    base-url: http://localhost:8082  # For dev: mock. For production: actual Switch HTTP base if used
     socket:
       enabled: true
-      host: localhost
-      port: 9084
+      host: localhost   # For production: actual Switch host
+      port: 9084        # TCP port (used when ssl-enabled: false)
+      ssl-port: 9444    # TLS port (used when ssl-enabled: true; mock_switch listens here)
       ssl-enabled: true
       trust-store: file:${user.dir}/../certs/switch-truststore.jks
       trust-store-password: IMPS-Backend
@@ -140,6 +162,10 @@ imps:
   api:
     version: "2.1"
   org-id: BANK01
+  # Fallback host/port when institution_master has null switch_ip/switch_port (edit here only; no env)
+  routing:
+    switch-default-host: localhost
+    switch-default-port: 9084
   heartbeat:
     switch-check-enabled: true           # true = periodically check switch connectivity
     switch-check-interval-ms: 180000    # Check every 3 minutes
@@ -148,12 +174,10 @@ imps:
     switch-check-ssl-ports: 9444,9443,9445
 
 # ===========================================
-# PROFILE: ssl – REST over HTTPS (Optional)
+# PROFILE: ssl – REST over HTTPS
 # ===========================================
-# Use: mvn spring-boot:run -Dspring-boot.run.profiles=ssl
-# IMPS: https://localhost:8443
-# Switch: https://localhost:8082
-# NPCI mock: https://localhost:8445
+# ssl is default in application.yml; use -Dspring.profiles.active=default for HTTP
+# IMPS: 8443, Switch: 8444, NPCI mock: 8445
 # ===========================================
 ---
 spring:
@@ -169,12 +193,12 @@ server:
     key-store-type: PKCS12
     key-alias: imps
 
-# When ssl profile is active, IMPS calls Switch and NPCI mock over HTTPS
+# When ssl profile is active, IMPS uses HTTPS for routing (set to actual URLs in production)
 routing:
   npci:
     base-url: https://localhost:8445
   switch:
-    base-url: https://localhost:8082
+    base-url: https://localhost:8444
 
 # ===========================================
 # PROFILE: docker – cert paths for container

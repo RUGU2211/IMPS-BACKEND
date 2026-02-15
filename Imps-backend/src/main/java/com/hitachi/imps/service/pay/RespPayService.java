@@ -6,7 +6,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.hitachi.imps.client.switchclient.ISwitchClient;
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.converter.XmlToIsoConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
@@ -29,7 +29,7 @@ public class RespPayService {
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private IsoToXmlConverter isoToXmlConverter;
     @Autowired private ISwitchClient switchClient;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -125,11 +125,11 @@ public class RespPayService {
         if (txnIdForNpci != null && pendingSocketStore.completePending(txnIdForNpci, xml)) return;
         try {
             if (txnIdForNpci != null && !txnIdForNpci.isBlank())
-                npciMockClient.sendRespPay(xml, txnIdForNpci);
+                npciRestClient.sendRespPay(xml, txnIdForNpci);
             else
-                npciMockClient.sendRespPay(xml);
+                npciRestClient.sendRespPay(xml);
         } catch (Exception e) {
-            System.out.println("NPCI Mock Client not available: " + e.getMessage());
+            System.out.println("NPCI not available: " + e.getMessage());
         }
     }
 }

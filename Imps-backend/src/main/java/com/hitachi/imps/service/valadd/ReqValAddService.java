@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hitachi.imps.client.npci.NpciMockClient;
+import com.hitachi.imps.client.npci.NpciRestClient;
 import com.hitachi.imps.client.switchclient.ISwitchClient;
 import com.hitachi.imps.converter.IsoToXmlConverter;
 import com.hitachi.imps.iso.ImpsIsoPackager;
@@ -35,7 +35,7 @@ public class ReqValAddService {
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
     @Autowired private IsoToXmlConverter isoToXmlConverter;
     @Autowired private ISwitchClient switchClient;
-    @Autowired private NpciMockClient npciMockClient;
+    @Autowired private NpciRestClient npciRestClient;
     @Autowired private MessageAuditService auditService;
     @Autowired private XmlParsingService xmlParsingService;
     @Autowired private TransactionService transactionService;
@@ -80,7 +80,7 @@ public class ReqValAddService {
             transactionService.markFailure(txn, respXml);
             auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciMockClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             return;
         }
 
@@ -88,14 +88,14 @@ public class ReqValAddService {
         String requestOrgId = xmlParsingService.extractOrgId(xml);
         if (switchAddressResolver.isBankDown(requestOrgId)) {
             var downOpt = switchAddressResolver.findDownInstitution(requestOrgId);
-            downOpt.ifPresent(SwitchAddressResolver::logFailedSwitchToConsole);
-            String errMsg = downOpt.map(SwitchAddressResolver::buildBankDownErrMsg).orElse("Bank switch unreachable. Transaction failed.");
+            downOpt.ifPresent(switchAddressResolver::logFailedSwitchToConsole);
+            String errMsg = downOpt.map(switchAddressResolver::buildBankDownErrMsg).orElse("Bank switch unreachable. Transaction failed.");
             TransactionEntity txn = transactionService.createRequest(txnId, xml, "VALADD");
             respXml = buildFailureResponse(msgId, "BANK_DOWN", errMsg);
             transactionService.markFailure(txn, respXml);
             auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciMockClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             return;
         }
 
@@ -112,13 +112,13 @@ public class ReqValAddService {
                 String approvalNum = extractApprovalNum(response);
                 transactionService.markSuccess(txn, respXml, approvalNum, null);
                 if (sendToNpci(txnId, respXml)) return;
-                try { npciMockClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             } else {
                 respXml = buildFailureResponse(msgId, "96", "Switch response timeout");
                 transactionService.markFailure(txn, respXml);
                 auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
                 if (sendToNpci(txnId, respXml)) return;
-                try { npciMockClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
             }
             return;
         }
@@ -127,7 +127,7 @@ public class ReqValAddService {
         transactionService.markFailure(txn, respXml);
                 auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
         if (sendToNpci(txnId, respXml)) return;
-        try { npciMockClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI Mock not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
     }
 
     private boolean sendToNpci(String txnId, String respXml) {
@@ -191,9 +191,9 @@ public class ReqValAddService {
         transactionService.markIsoSent(txn);
         String respXml;
         try {
-            respXml = (txnId != null && !txnId.isBlank()) ? npciMockClient.sendReqValAdd(reqXml, txnId) : npciMockClient.sendReqValAdd(reqXml);
+            respXml = (txnId != null && !txnId.isBlank()) ? npciRestClient.sendReqValAdd(reqXml, txnId) : npciRestClient.sendReqValAdd(reqXml);
         } catch (Exception e) {
-            System.err.println("NPCI Mock not available: " + e.getMessage());
+            System.err.println("NPCI not available: " + e.getMessage());
             transactionService.markFailure(txn, null);
             return null;
         }

@@ -16,6 +16,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.hitachi.imps.config.RoutingConfig;
+import com.hitachi.imps.iso.ImpsIsoPackager;
 import com.hitachi.imps.config.SslConfig;
 import com.hitachi.imps.service.routing.SwitchAddressResolver;
 import com.hitachi.imps.service.routing.SwitchAddressResolver.SwitchAddress;
@@ -80,7 +81,22 @@ public class SocketSwitchClient implements ISwitchClient {
             }
             byte[] resp = new byte[respLen];
             in.readFully(resp);
-            System.out.println("[IMPS] Response received from Switch (" + resp.length + " bytes)");
+            System.out.println("==========================================");
+            System.out.println("[IMPS] RESPONSE RECEIVED FROM SWITCH (SOCKET)");
+            System.out.println("Message Type: " + apiType.replace("req", "resp").replace("Req", "Resp") + " | TxnId: " + txnId + " | Length: " + resp.length + " bytes");
+            System.out.println("==========================================");
+            try {
+                ISOMsg respIso = IsoUtil.unpack(resp, new ImpsIsoPackager());
+                StringBuilder sb = new StringBuilder();
+                sb.append("MTI=").append(respIso.getMTI()).append("\n");
+                for (int i = 1; i <= 128; i++) {
+                    if (respIso.hasField(i)) sb.append("DE").append(i).append("=").append(respIso.getString(i)).append("\n");
+                }
+                System.out.println(sb.toString());
+            } catch (Exception e) {
+                System.out.println("(ISO format failed: " + e.getMessage() + ")");
+            }
+            log.info("[IMPS] Response received from Switch [{}] txnId={} {} bytes", apiType, txnId, resp.length);
             return resp;
         } catch (IOException e) {
             log.error("[IMPS] Switch socket send failed [{}]/{}: {}", apiType, txnId, e.getMessage(), e);

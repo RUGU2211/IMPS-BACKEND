@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns2:ReqPay xmlns:ns2="http://npci.org/upi/schema/" xmlns:ns3="http://npci.org/cm/schema/">
+    <Head ver="2.0" ts="2026-01-25T10:30:00.000+05:30" orgId="BANK01" msgId="{{msgId}}" prodType="IMPS"/>
+    <Txn note="P2A Fund Transfer" custRef="023113001276" refId="001276" refUrl="https://www.npci.org.in/" ts="2026-01-25T10:30:00.000+05:30" refCategory="00" type="PAY" purpose="00" initiationMode="00" id="{{txnId}}"/>
+    <Payer addr="BANK01@psp" name="Rugved Kharde" seqNum="1" type="ENTITY" code="4814">
+        <Info>
+            <Identity id="1234567890123456|HDFC0000001" type="BANK" verifiedName="Rugved Kharde"/>
+            <Rating verifiedAddress="TRUE"/>
+        </Info>
+        <Device>
+            <Tag name="MOBILE" value="919494916511"/>
+            <Tag name="LOCATION" value=""/>
+            <Tag name="TYPE" value="MOB"/>
+        </Device>
+        <Ac addrType="ACCOUNT">
+            <Detail name="ACNUM" value="1234567890123456"/>
+            <Detail name="IFSC" value="HDFC0000001"/>
+            <Detail name="ACTYPE" value="SAVINGS"/>
+        </Ac>
+        <Creds><Cred subType="NA" type="PreApproved"><Data>MDB8QVBQUk9WRUQ</Data></Cred></Creds>
+        <Amount value="1000.00" curr="INR"/>
+    </Payer>
+    <Payees>
+        <Payee seqNum="0" type="PERSON" code="0000">
+            <Amount value="1000.00" curr="INR"/>
+            <Ac addrType="ACCOUNT">
+                <Detail name="IFSC" value="ICIC0000001"/>
+                <Detail name="ACTYPE" value="SAVINGS"/>
+                <Detail name="ACNUM" value="1111222233334444"/>
+            </Ac>
+        </Payee>
+    </Payees>
+</ns2:ReqPay>

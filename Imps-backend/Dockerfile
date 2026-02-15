@@ -29,9 +29,9 @@ COPY --from=builder /build/app.jar app.jar
 # Uses spring.profiles.active=docker for /app/certs paths
 RUN mkdir -p /app/certs
 
-# Expose HTTP, TCP socket, and TLS/SSL ports (application.yml)
-# HTTP: 8081 | NPCI socket TCP: 9083, TLS: 9443 | Switch socket TCP: 9086, TLS: 9446 | HTTPS (ssl profile): 8443
+# Expose HTTP, TCP socket, TLS socket, and HTTPS (application.yml)
+# HTTP: 8081 | NPCI socket TCP: 9083 TLS: 9443 | Switch socket TCP: 9086 TLS: 9446 | HTTPS (with ssl profile): 8443
 EXPOSE 8081 9083 9443 9086 9446 8443
 
-# Run the application (docker profile = /app/certs paths)
+# Run with docker profile (cert paths /app/certs). Add ssl profile for HTTPS: -Dspring.profiles.active=docker,ssl
 ENTRYPOINT ["java", "-Dspring.profiles.active=docker", "-jar", "app.jar"]
