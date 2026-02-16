@@ -1,0 +1,15 @@
+# IMPS Backend – Package Structure
+
+See **IMPS_BACKEND_CODE_EXPLANATION.txt** (docs root) for detailed file-wise breakdown.
+
+## Key Packages
+
+| Package | Contents |
+|---------|----------|
+| Controllers | ImpsController, NpciController |
+| Service | ImpsInboundService, ReqPayService, RespPayService, ReqChkTxnService, etc. |
+| Converter | XmlToIsoConverter, IsoToXmlConverter |
+| Client | ISwitchClient, RestSwitchClient, SocketSwitchClient, NpciRestClient |
+| Config | SslConfig, SocketConfig, NpciSocketConfig, RoutingConfig |
+| Socket | NpciSocketServer, SwitchSocketServer, SocketRequestDispatcher, PendingSocketResponseStore |
+| Entity / Repository | TransactionEntity, InstitutionMaster, MessageAuditLog |

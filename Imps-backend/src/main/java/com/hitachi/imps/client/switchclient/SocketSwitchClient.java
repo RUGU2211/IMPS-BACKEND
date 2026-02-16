@@ -44,11 +44,7 @@ public class SocketSwitchClient implements ISwitchClient {
         Socket s = null;
         String protocol = useSsl ? "SSL/TLS" : "TCP";
         try {
-            System.out.println("==========================================");
-            System.out.println("[IMPS] OPENING CONNECTION TO SWITCH");
-            System.out.println("Protocol: " + protocol + " | Host: " + host + " | Port: " + port);
-            System.out.println("Message Type: " + apiType + " | TxnId: " + txnId);
-            System.out.println("==========================================");
+            log.info("[IMPS] Opening connection to Switch: {} | {}:{} | {} txnId={}", protocol, host, port, apiType, txnId);
             
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
@@ -58,43 +54,40 @@ public class SocketSwitchClient implements ISwitchClient {
                 ssl.connect(new InetSocketAddress(host, port), 10000);
                 ssl.startHandshake();
                 s = ssl;
-                System.out.println("[IMPS] SSL/TLS handshake completed with Switch");
+                log.debug("[IMPS] SSL/TLS handshake completed with Switch");
             } else {
                 s = new Socket();
                 s.connect(new InetSocketAddress(host, port), 10000);
-                System.out.println("[IMPS] TCP connection established with Switch");
+                log.debug("[IMPS] TCP connection established with Switch");
             }
             s.setSoTimeout(READ_TIMEOUT_MS);
             
-            System.out.println("[IMPS] Sending ISO message to Switch (" + isoBytes.length + " bytes)");
+            log.debug("[IMPS] Sending ISO message to Switch ({} bytes)", isoBytes.length);
             DataOutputStream out = new DataOutputStream(s.getOutputStream());
             DataInputStream in = new DataInputStream(s.getInputStream());
             out.writeInt(isoBytes.length);
             out.write(isoBytes);
             out.flush();
             
-            System.out.println("[IMPS] Waiting for response from Switch...");
             int respLen = in.readInt();
             if (respLen <= 0 || respLen > MAX_ISO_SIZE) {
-                System.err.println("[IMPS] Invalid response length from Switch: " + respLen);
+                log.warn("[IMPS] Invalid response length from Switch: {}", respLen);
                 return null;
             }
             byte[] resp = new byte[respLen];
             in.readFully(resp);
-            System.out.println("==========================================");
-            System.out.println("[IMPS] RESPONSE RECEIVED FROM SWITCH (SOCKET)");
-            System.out.println("Message Type: " + apiType.replace("req", "resp").replace("Req", "Resp") + " | TxnId: " + txnId + " | Length: " + resp.length + " bytes");
-            System.out.println("==========================================");
             try {
                 ISOMsg respIso = IsoUtil.unpack(resp, new ImpsIsoPackager());
-                StringBuilder sb = new StringBuilder();
-                sb.append("MTI=").append(respIso.getMTI()).append("\n");
-                for (int i = 1; i <= 128; i++) {
-                    if (respIso.hasField(i)) sb.append("DE").append(i).append("=").append(respIso.getString(i)).append("\n");
+                if (log.isDebugEnabled()) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("MTI=").append(respIso.getMTI()).append("\n");
+                    for (int i = 1; i <= 128; i++) {
+                        if (respIso.hasField(i)) sb.append("DE").append(i).append("=").append(respIso.getString(i)).append("\n");
+                    }
+                    log.debug("[IMPS] Switch response ISO: {}", sb);
                 }
-                System.out.println(sb.toString());
             } catch (Exception e) {
-                System.out.println("(ISO format failed: " + e.getMessage() + ")");
+                log.debug("[IMPS] ISO format failed: {}", e.getMessage());
             }
             log.info("[IMPS] Response received from Switch [{}] txnId={} {} bytes", apiType, txnId, resp.length);
             return resp;

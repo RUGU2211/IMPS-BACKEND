@@ -1,0 +1,58 @@
+# IMPS – Deployment Guide
+
+## Prerequisites
+
+- Java (JDK 17+)
+- Maven
+- PostgreSQL
+- Keystores (run certs/generate-certs.bat or .sh)
+
+## 1. Environment Setup
+
+Each project uses .env for configuration. Copy .env.example to .env in each project folder:
+
+  Imps-backend/   cp .env.example .env
+  mock_npci/      cp .env.example .env
+  mock_switch/    cp .env.example .env
+
+Edit .env with your values. Default profile is prod,ssl. For dev, set SPRING_PROFILES_ACTIVE=dev,ssl.
+
+## 2. Database Setup
+
+  psql -U postgres -c "CREATE DATABASE imps_db;"
+  psql -U postgres -c "CREATE DATABASE switch_db;"
+  psql -U postgres -d imps_db -f sql/imps_full_schema.sql
+  psql -U postgres -d switch_db -f sql/switch_full_schema.sql
+
+## 3. Run Services
+
+Terminal 1 – IMPS Backend
+  cd Imps-backend
+  mvn spring-boot:run
+
+Terminal 2 – mock_switch
+  cd mock_switch
+  mvn spring-boot:run
+
+Terminal 3 – mock_npci
+  cd mock_npci
+  mvn spring-boot:run
+
+## 4. Profiles
+
+- Default: prod,ssl (HTTPS 8443, TLS 9443)
+- Dev: set SPRING_PROFILES_ACTIVE=dev,ssl in .env
+- HTTP only: -Dspring.profiles.active=default (no ssl)
+
+## 5. Production
+
+Profile prod,ssl is the default. SPRING_DATASOURCE_PASSWORD is required (no default in prod).
+
+See Environment_Variables.txt for all env vars. Set via .env or system environment.
+Do NOT hardcode passwords. Use secrets manager in production.
+
+Configure in .env:
+  ROUTING_NPCI_BASE_URL    → actual NPCI REST base
+  NPCI_SOCKET_HOST / PORT  → actual NPCI socket
+  ROUTING_SWITCH_*         → actual Switch
+  institution_master       → bank switch addresses (DB)

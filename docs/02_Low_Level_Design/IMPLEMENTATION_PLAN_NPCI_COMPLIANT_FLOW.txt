@@ -5,7 +5,7 @@ Status: IMPLEMENTED (as of current project state)
 
 Target Architecture: Socket-to-socket, ISO to Switch, new connections everywhere, NPCI-compliant.
 
-Document Purpose: Implementation roadmap and reference for the NPCI-compliant flow. Phases A–E are implemented. See PROJECT_CONNECTIONS (../PROJECT_CONNECTIONS.txt) and SOCKET_GUIDE (../socket/SOCKET_GUIDE.txt) for current usage.
+Document Purpose: Implementation roadmap and reference for the NPCI-compliant flow. Phases A–E are implemented. See [01_Architecture/Project_Connections.txt](../01_Architecture/Project_Connections.txt) and [05_Integration/SOCKET_GUIDE.txt](../05_Integration/SOCKET_GUIDE.txt) for current usage.
 
 ---
 
@@ -225,16 +225,16 @@ Required:
 Phase E: Testing and Documentation
 
 
-1. docs/socket/SOCKET_GUIDE.md (PowerShell APIs)
+1. docs/05_Integration/SOCKET_GUIDE.txt (PowerShell APIs)
    - Update for two-phase flow:
      - Phase 1 test: Connect → Req → Read ACK → Close. (No second read.)
      - Phase 3: mock_npci must be able to receive from IMPS (separate test or automated).
 
-2. docs/PROJECT_CONNECTIONS.md
+2. docs/01_Architecture/Project_Connections.txt
    - Document npci.socket.host/port
    - Document connection summary table from spec
 
-3. docs/guides/IMPS_Flow_Chart.md
+3. docs/01_Architecture/IMPS_Flow_Chart.txt
    - Update diagram for: Req socket (ACK only) | Switch socket | Resp socket (IMPS outbound)
 
 ---

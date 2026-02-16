@@ -1,0 +1,40 @@
+# IMPS – Deployment Architecture
+
+## 1. Services and Ports
+
+| Service | HTTP | HTTPS | Socket TCP | Socket TLS |
+|---------|------|-------|------------|------------|
+| **Imps-backend** | 8081 | 8443 | 9083 | 9443 |
+| **mock_switch** | 8082 | 8444 | 9084 | 9444 |
+| **mock_npci** | 8083 | 8445 | 9085 | 9445 |
+| **Switch → IMPS (reverse)** | — | — | 9086 | 9446 |
+
+Default: `ssl` profile active → HTTPS 8443, 8444, 8445 and TLS 9443, 9444, 9445.
+
+## 2. Database
+
+| Database | URL | Used By |
+|----------|-----|---------|
+| imps_db | jdbc:postgresql://localhost:5432/imps_db | Imps-backend |
+| switch_db | jdbc:postgresql://localhost:5432/switch_db | mock_switch |
+
+## 3. Run Mode
+
+- **Local (mvn):** `cd Imps-backend; mvn spring-boot:run` (and similarly for mock_switch, mock_npci)
+- **JAR:** `java -jar imps-backend.jar` (with appropriate profiles)
+- **Docker:** `application-ssl-docker` profile supports cert paths under `/app/certs` (mount volume)
+
+## 4. Connection Flow
+
+- **NPCI → IMPS:** Socket 9083/9443 or REST 8081/8443
+- **IMPS → Switch:** Socket 9084/9444 or REST 8082/8444 (routing.switch.rest.enabled)
+- **IMPS → NPCI:** Socket 9085/9445 or REST 8083/8445 (outbound response)
+- **Switch → IMPS (reverse):** Socket 9086/9446
+
+## 5. Profiles
+
+| Profile | Use |
+|---------|-----|
+| default | HTTP (8081, 8082, 8083), plain TCP (9083–9086) |
+| ssl | HTTPS (8443–8445), TLS (9443–9446) |
+| docker | Cert paths for container (`/app/certs`) |

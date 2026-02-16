@@ -1,0 +1,15 @@
+# IMPS – Port and Endpoint Config
+
+## Service Ports
+
+| Service | HTTP | HTTPS | Socket TCP | Socket TLS |
+|---------|------|-------|------------|------------|
+| Imps-backend | 8081 | 8443 | 9083 | 9443 |
+| mock_switch | 8082 | 8444 | 9084 | 9444 |
+| mock_npci | 8083 | 8445 | 9085 | 9445 |
+| Switch → IMPS | — | — | 9086 | 9446 |
+
+## Protocol
+
+- NPCI ↔ IMPS: [4 bytes length big-endian][XML]
+- Switch ↔ IMPS: [4 bytes length big-endian][ISO 8583]

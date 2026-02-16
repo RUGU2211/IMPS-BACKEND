@@ -1,5 +1,7 @@
 Sample testing data for IMPS API Collection
 
+Ports (HTTPS): IMPS 8443, Switch 8444, NPCI 8445. Configured via .env in each project.
+Default profile: prod,ssl.
 
 ISO 8583 binary (Switch ↔ IMPS)
 

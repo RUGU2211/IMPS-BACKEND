@@ -1,0 +1,35 @@
+# IMPS – TLS Configuration
+
+## Keystores
+
+Run from project root:
+```powershell
+.\certs\generate-certs.bat
+```
+Password: `IMPS-Backend`
+
+## Path Conventions
+
+| Config | Example |
+|--------|---------|
+| ssl.key-store | file:../certs/imps-keystore.jks |
+| ssl.trust-store | file:../certs/imps-truststore.jks |
+| npci.socket.trust-store | file:../certs/npci-truststore.jks |
+| routing.switch.socket.trust-store | file:../certs/switch-truststore.jks |
+
+## Ports (SSL)
+
+| Connection | Plain | TLS |
+|------------|-------|-----|
+| NPCI → IMPS | 9083 | 9443 |
+| IMPS → Switch | 9084 | 9444 |
+| IMPS → NPCI | 9085 | 9445 |
+| Switch → IMPS (reverse) | 9086 | 9446 |
+
+## application.yml
+
+- `ssl.enabled: true` – enable TLS for socket servers
+- `npci.socket.ssl-enabled: true` – TLS for outbound NPCI
+- `routing.switch.socket.ssl-enabled: true` – TLS for Switch
+
+See [05_Integration/SOCKET_GUIDE.txt](../05_Integration/SOCKET_GUIDE.txt) for OpenSSL tests and firewall rules.

@@ -45,29 +45,47 @@
 # ===========================================
 # SERVER CONFIGURATION
 # ===========================================
+# All values read from .env / environment. Set SPRING_PROFILES_ACTIVE=dev or prod
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
+
+# Actuator: health endpoint for load balancers / K8s
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
 
 spring:
   application:
     name: Imps-backend
-  # Default profile: ssl (HTTPS). Use -Dspring.profiles.active= (empty) or "default" for HTTP only.
+  # Profile from .env: SPRING_PROFILES_ACTIVE=prod,ssl (default) or dev,ssl
   profiles:
-    active: ssl
+    active: ${SPRING_PROFILES_ACTIVE:prod,ssl}
   datasource:
-    url: jdbc:postgresql://localhost:5432/imps_db
-    username: postgres
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/imps_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
 
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
     open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+        format_sql: ${SPRING_JPA_FORMAT_SQL:true}
+
+# Logging – from .env (dev: DEBUG, prod: INFO)
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    com.hitachi.imps: ${LOGGING_LEVEL_COM_HITACHI_IMPS:DEBUG}
+    org.hibernate.SQL: ${LOGGING_LEVEL_ORG_HIBERNATE_SQL:DEBUG}
 
 # ===========================================
 # CONNECTION FLOW CONFIGURATION
@@ -84,11 +102,11 @@ spring:
 npci:
   compliant-flow: true
   socket:
-    host: 192.168.1.38
-    port: 9445
+    host: ${NPCI_SOCKET_HOST:192.168.1.38}
+    port: ${NPCI_SOCKET_PORT:9445}
     ssl-enabled: true
-    trust-store: file:${user.dir}/../certs/imps-truststore.jks
-    trust-store-password: IMPS-Backend
+    trust-store: ${NPCI_TRUST_STORE:file:${user.dir}/../certs/imps-truststore.jks}
+    trust-store-password: ${SSL_TRUST_STORE_PASSWORD:IMPS-Backend}
     connect-timeout-ms: 10000
     read-timeout-ms: 30000
 
@@ -98,23 +116,21 @@ npci:
 # Defines how IMPS routes messages between NPCI and Switch. Set to actual host/port for production.
 # ===========================================
 routing:
-  # NPCI REST (used when NPCI sends request via HTTP; ACK and responses go to this base-url)
   npci:
-    base-url: http://localhost:8083  # For dev: mock. For production: actual NPCI REST base URL
+    base-url: ${ROUTING_NPCI_BASE_URL:http://localhost:8083}
     endpoints:
       ack: /npci/ack
   
-  # Switch Routing (socket: IMPS → Switch outbound; set host/port to actual Switch for production)
   switch:
-    base-url: http://localhost:8082  # For dev: mock. For production: actual Switch HTTP base if used
+    base-url: ${ROUTING_SWITCH_BASE_URL:http://localhost:8082}
     socket:
       enabled: true
-      host: localhost   # For production: actual Switch host
-      port: 9084        # TCP port (used when ssl-enabled: false)
-      ssl-port: 9444    # TLS port (used when ssl-enabled: true; mock_switch listens here)
+      host: ${ROUTING_SWITCH_SOCKET_HOST:localhost}
+      port: ${ROUTING_SWITCH_SOCKET_PORT:9084}
+      ssl-port: ${ROUTING_SWITCH_SSL_PORT:9444}
       ssl-enabled: true
-      trust-store: file:${user.dir}/../certs/switch-truststore.jks
-      trust-store-password: IMPS-Backend
+      trust-store: ${ROUTING_SWITCH_TRUST_STORE:file:${user.dir}/../certs/switch-truststore.jks}
+      trust-store-password: ${SSL_TRUST_STORE_PASSWORD:IMPS-Backend}
     rest:
       enabled: false
 
@@ -127,11 +143,11 @@ routing:
 # ===========================================
 ssl:
   enabled: true
-  key-store: file:${user.dir}/../certs/imps-keystore.jks
-  key-store-password: IMPS-Backend
+  key-store: ${SSL_KEY_STORE:file:${user.dir}/../certs/imps-keystore.jks}
+  key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
   key-alias: imps
-  trust-store: file:${user.dir}/../certs/imps-truststore.jks
-  trust-store-password: IMPS-Backend
+  trust-store: ${SSL_TRUST_STORE:file:${user.dir}/../certs/imps-truststore.jks}
+  trust-store-password: ${SSL_TRUST_STORE_PASSWORD:IMPS-Backend}
   client-auth: none
 
 # ===========================================
@@ -161,15 +177,15 @@ socket:
 imps:
   api:
     version: "2.1"
-  # Startup banner and API base: host, protocol, port (all from here / server.port; console uses these)
+  # Startup banner and API base – from .env
   server:
-    host: 192.168.1.38
-    protocol: http
-  org-id: BANK01
+    host: ${IMPS_SERVER_HOST:localhost}
+    protocol: ${IMPS_SERVER_PROTOCOL:http}
+  org-id: ${IMPS_ORG_ID:BANK01}
   # Fallback host/port when institution_master has null switch_ip/switch_port (edit here only; no env)
   routing:
-    switch-default-host: localhost
-    switch-default-port: 9084
+    switch-default-host: ${IMPS_SWITCH_DEFAULT_HOST:localhost}
+    switch-default-port: ${IMPS_SWITCH_DEFAULT_PORT:9084}
   heartbeat:
     switch-check-enabled: true           # true = periodically check switch connectivity
     switch-check-interval-ms: 180000    # Check every 3 minutes
@@ -178,9 +194,22 @@ imps:
     switch-check-ssl-ports: 9444,9443,9445
 
 # ===========================================
+# PROFILE: prod – Production (password required, no default)
+# ===========================================
+# SPRING_PROFILES_ACTIVE=prod,ssl
+# Fails at startup if SPRING_DATASOURCE_PASSWORD is not set
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+# ===========================================
 # PROFILE: ssl – REST over HTTPS
 # ===========================================
-# ssl is default in application.yml; use -Dspring.profiles.active=default for HTTP
+# Combine with dev or prod: dev,ssl or prod,ssl
 # IMPS: 8443, Switch: 8444, NPCI mock: 8445
 # ===========================================
 ---
@@ -192,20 +221,19 @@ imps:
   server:
     protocol: https
 server:
-  port: 8443
+  port: ${SERVER_PORT:8443}
   ssl:
     enabled: true
-    key-store: file:${user.dir}/../certs/imps-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SSL_KEY_STORE:file:${user.dir}/../certs/imps-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
     key-store-type: PKCS12
     key-alias: imps
 
-# When ssl profile is active, IMPS uses HTTPS for routing (set to actual URLs in production)
 routing:
   npci:
-    base-url: https://localhost:8445
+    base-url: ${ROUTING_NPCI_BASE_URL:https://localhost:8445}
   switch:
-    base-url: https://localhost:8444
+    base-url: ${ROUTING_SWITCH_BASE_URL:https://localhost:8444}
 
 # ===========================================
 # PROFILE: docker – cert paths for container

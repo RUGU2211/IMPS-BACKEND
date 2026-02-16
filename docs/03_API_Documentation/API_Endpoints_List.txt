@@ -1,0 +1,47 @@
+# IMPS API Endpoints
+
+## Base Path
+
+- REST: `http://{host}:{port}/imps/{reqtype|resptype}/{txnId}`
+- IMPS: port 8081 (HTTP), 8443 (HTTPS)
+
+## Request Endpoints (NPCI → IMPS)
+
+| Method | Path | Content-Type | Body |
+|--------|------|--------------|------|
+| POST | /imps/reqpay/{txnId} | application/xml | ReqPay XML |
+| POST | /imps/reqchktxn/{txnId} | application/xml | ReqChkTxn XML |
+| POST | /imps/reqhbt/{txnId} | application/xml | ReqHbt XML |
+| POST | /imps/reqlistaccpvd/{txnId} | application/xml | ReqListAccPvd XML |
+| POST | /imps/reqvaladd/{txnId} | application/xml | ReqValAdd XML |
+
+## Request Endpoints (Switch → IMPS) – Same paths, ISO body
+
+| Method | Path | Content-Type | Body |
+|--------|------|--------------|------|
+| POST | /imps/reqpay/{txnId} | application/octet-stream | ISO 8583 binary |
+| POST | /imps/reqchktxn/{txnId} | application/octet-stream | ISO 8583 binary |
+| POST | /imps/reqhbt/{txnId} | application/octet-stream | ISO 8583 binary |
+| POST | /imps/reqlistaccpvd/{txnId} | application/octet-stream | ISO 8583 binary |
+| POST | /imps/reqvaladd/{txnId} | application/octet-stream | ISO 8583 binary |
+
+## Response Endpoints (Switch → IMPS callback)
+
+| Method | Path | Content-Type | Body |
+|--------|------|--------------|------|
+| POST | /imps/resppay/{txnId} | application/octet-stream | RespPay ISO |
+| POST | /imps/respchktxn/{txnId} | application/octet-stream | RespChkTxn ISO |
+| POST | /imps/resphbt/{txnId} | application/octet-stream | RespHbt ISO |
+| POST | /imps/respvaladd/{txnId} | application/octet-stream | RespValAdd ISO |
+| POST | /imps/resplistaccpvd/{txnId} | application/octet-stream | RespListAccPvd ISO |
+
+## Alternate Path: /npci
+
+Same endpoints under `/npci` (e.g. `/npci/reqpay/{txnId}`) – identical behavior for XML.
+
+## Socket API
+
+- NPCI → IMPS: [4 bytes length][XML] on port 9083 (TCP) or 9443 (TLS)
+- Switch → IMPS: [4 bytes length][ISO] on port 9086 (TCP) or 9446 (TLS)
+
+See [05_Integration/SOCKET_GUIDE.txt](../05_Integration/SOCKET_GUIDE.txt) for PowerShell samples.

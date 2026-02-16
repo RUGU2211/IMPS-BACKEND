@@ -1,5 +1,8 @@
 package com.hitachi.imps.service.heartbeat;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,6 +39,8 @@ import com.hitachi.imps.converter.IsoToXmlConverter;
 @Service
 public class ReqHbtService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReqHbtService.class);
+
     @Value("${imps.org-id:BANK01}")
     private String orgId;
 
@@ -63,12 +68,12 @@ public class ReqHbtService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqHbtService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("ReqHbtService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqHbtService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("ReqHbtService (NPCI) error", e); }
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
@@ -105,7 +110,7 @@ public class ReqHbtService {
             transactionService.markSuccess(txn, respXml, null, null);
         }
         if (sendToNpci(txnId, respXml)) return;
-        try { npciRestClient.sendRespHbt(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespHbt(respXml); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
     }
 
     /** Switch → IMPS: receive ReqHbt ISO, return RespHbt ISO with same bank status logic. Logs to transaction and message_audit_log. */
@@ -190,12 +195,9 @@ public class ReqHbtService {
         for (InstitutionMaster inst : status.downInstitutions) {
             String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : switchDefaultHost;
             String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : switchDefaultPort;
-            System.out.println("[IMPS] Switch connection FAILED (institution_master): id=" + inst.getId()
-                + " name=\"" + (inst.getName() != null ? inst.getName() : "") + "\""
-                + " request_org_id=" + (inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "")
-                + " bank_code=" + (inst.getBankCode() != null ? inst.getBankCode() : "")
-                + " switch_ip=" + host + " switch_port=" + port
-                + " | DB switch_status=FAILED (all switches must be UP for SUCCESS)");
+            log.warn("[IMPS] Switch connection FAILED (institution_master): id={} name=\"{}\" request_org_id={} bank_code={} switch_ip={} switch_port={} | DB switch_status=FAILED (all switches must be UP for SUCCESS)",
+                inst.getId(), inst.getName() != null ? inst.getName() : "", inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "",
+                inst.getBankCode() != null ? inst.getBankCode() : "", host, port);
         }
     }
 

@@ -1,6 +1,8 @@
 package com.hitachi.imps.service.chktxn;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import com.hitachi.imps.util.IsoUtil;
 @Service
 public class RespChkTxnService {
 
+    private static final Logger log = LoggerFactory.getLogger(RespChkTxnService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -38,8 +41,7 @@ public class RespChkTxnService {
         try {
             processFromNpci(xml, pathTxnId, null);
         } catch (Exception e) {
-            System.err.println("RespChkTxnService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespChkTxnService (NPCI) ERROR", e);
         }
     }
 
@@ -48,8 +50,7 @@ public class RespChkTxnService {
         try {
             processFromNpci(xml, pathTxnId, reqMsgId);
         } catch (Exception e) {
-            System.err.println("RespChkTxnService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespChkTxnService (NPCI) ERROR", e);
         }
     }
 
@@ -72,8 +73,7 @@ public class RespChkTxnService {
         try {
             processFromSwitch(isoBytes, pathTxnId);
         } catch (Exception e) {
-            System.err.println("RespChkTxnService (Switch) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespChkTxnService (Switch) ERROR", e);
         }
     }
 
@@ -87,7 +87,7 @@ public class RespChkTxnService {
             respCodeVal = iso.getString(39);
             approvalNumVal = iso.getString(38);
         } catch (Exception e) {
-            System.err.println("Error extracting RespChkTxn ISO fields: " + e.getMessage());
+            log.warn("Error extracting RespChkTxn ISO fields", e);
         }
         final String responseCode = respCodeVal;
         final String approvalNumber = approvalNumVal;
@@ -104,7 +104,7 @@ public class RespChkTxnService {
                 });
             }
         } catch (Exception e) {
-            System.err.println("Error updating ChkTxn transaction: " + e.getMessage());
+            log.error("Error updating ChkTxn transaction", e);
         }
         auditService.saveRaw(txnId, "NPCI_RESPCHKTXN_XML_OUT", xml);
         String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : origTxnId;
@@ -113,7 +113,7 @@ public class RespChkTxnService {
             if (txnIdForNpci != null && !txnIdForNpci.isBlank()) npciRestClient.sendRespChkTxn(xml, txnIdForNpci);
             else npciRestClient.sendRespChkTxn(xml);
         } catch (Exception e) {
-            System.out.println("NPCI not available: " + e.getMessage());
+            log.warn("NPCI not available: {}", e.getMessage());
         }
     }
 }

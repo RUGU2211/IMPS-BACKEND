@@ -1,0 +1,10 @@
+# ===========================================
+# MOCK NPCI – Development Profile
+# ===========================================
+# SPRING_PROFILES_ACTIVE=dev,ssl
+# ===========================================
+
+logging:
+  level:
+    root: INFO
+    com.hitachi: DEBUG

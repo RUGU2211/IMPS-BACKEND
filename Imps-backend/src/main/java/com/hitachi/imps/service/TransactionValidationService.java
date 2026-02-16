@@ -3,6 +3,8 @@ package com.hitachi.imps.service;
 import java.util.Optional;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,8 @@ import com.hitachi.imps.repository.TransactionRepository;
  */
 @Service
 public class TransactionValidationService {
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionValidationService.class);
 
     @Autowired
     private TransactionRepository transactionRepository;
@@ -36,16 +40,16 @@ public class TransactionValidationService {
         result.setValid(true);
 
         try {
-            System.out.println("=== TRANSACTION VALIDATION START ===");
+            log.debug("Transaction validation start for txnId={}", txn != null ? txn.getTxnId() : "null");
 
             // 1. Validate Transaction exists
             if (txn == null) {
                 result.setValid(false);
                 result.addValidation("TRANSACTION", "NOT_FOUND", "Transaction not found in database");
-                System.out.println("✗ Transaction not found");
+                log.warn("Transaction validation failed: transaction not found");
                 return result;
             }
-            System.out.println("✓ Transaction found: " + txn.getTxnId());
+            log.debug("Transaction found: {}", txn.getTxnId());
 
             // 2. Validate Response Code
             String responseCode = null;
@@ -53,16 +57,15 @@ public class TransactionValidationService {
                 if (iso.hasField(39)) {
                     responseCode = iso.getString(39);
                     if ("00".equals(responseCode)) {
-                        System.out.println("✓ Response Code: SUCCESS (00)");
+                        log.debug("Response code: SUCCESS (00)");
                         result.addValidation("RESPONSE_CODE", "VALID", "00");
                     } else {
-                        System.out.println("✗ Response Code: FAILED (" + responseCode + ")");
+                        log.debug("Response code: FAILED ({})", responseCode);
                         result.addValidation("RESPONSE_CODE", "INVALID", responseCode);
-                        // Don't fail validation, just log it
                     }
                 }
             } catch (Exception e) {
-                System.out.println("⚠ Could not extract response code");
+                log.debug("Could not extract response code: {}", e.getMessage());
             }
 
             // 3. Validate RRN matches
@@ -71,15 +74,15 @@ public class TransactionValidationService {
                 if (iso.hasField(37)) {
                     rrn = iso.getString(37);
                     if (txn.getDe37() != null && rrn.equals(txn.getDe37())) {
-                        System.out.println("✓ RRN matches: " + rrn);
+                        log.debug("RRN matches: {}", rrn);
                         result.addValidation("RRN", "VALID", rrn);
                     } else {
-                        System.out.println("⚠ RRN mismatch: ISO=" + rrn + ", DB=" + txn.getDe37());
+                        log.debug("RRN mismatch: ISO={}, DB={}", rrn, txn.getDe37());
                         result.addValidation("RRN", "MISMATCH", "ISO:" + rrn + " vs DB:" + txn.getDe37());
                     }
                 }
             } catch (Exception e) {
-                System.out.println("⚠ Could not extract RRN");
+                log.debug("Could not extract RRN");
             }
 
             // 4. Validate STAN matches
@@ -88,15 +91,15 @@ public class TransactionValidationService {
                 if (iso.hasField(11)) {
                     stan = iso.getString(11);
                     if (txn.getDe11() != null && stan.equals(txn.getDe11())) {
-                        System.out.println("✓ STAN matches: " + stan);
+                        log.debug("STAN matches: {}", stan);
                         result.addValidation("STAN", "VALID", stan);
                     } else {
-                        System.out.println("⚠ STAN mismatch: ISO=" + stan + ", DB=" + txn.getDe11());
+                        log.debug("STAN mismatch: ISO={}, DB={}", stan, txn.getDe11());
                         result.addValidation("STAN", "MISMATCH", "ISO:" + stan + " vs DB:" + txn.getDe11());
                     }
                 }
             } catch (Exception e) {
-                System.out.println("⚠ Could not extract STAN");
+                log.debug("Could not extract STAN");
             }
 
             // 5. Payee Account validation done in Switch (account_master) – not here.
@@ -109,22 +112,20 @@ public class TransactionValidationService {
             if (payeeIfsc != null) {
                 Optional<InstitutionMaster> institutionOpt = institutionMasterRepository
                     .findByIfscCode(payeeIfsc);
-                
+
                 if (institutionOpt.isPresent() && Boolean.TRUE.equals(institutionOpt.get().getActive())) {
-                    System.out.println("✓ Institution Valid (institution_master): " + institutionOpt.get().getName());
+                    log.debug("Institution valid: {}", institutionOpt.get().getName());
                     result.addValidation("INSTITUTION", "VALID", institutionOpt.get().getName());
                 } else {
-                    System.out.println("⚠ Institution Not Found or Inactive: " + payeeIfsc);
+                    log.debug("Institution not found or inactive: {}", payeeIfsc);
                     result.addValidation("INSTITUTION", "NOT_FOUND", payeeIfsc);
                 }
             }
 
-            System.out.println("=== TRANSACTION VALIDATION COMPLETE ===");
-            System.out.println("Overall Result: " + (result.isValid() ? "VALID" : "INVALID"));
+            log.debug("Transaction validation complete: result={}", result.isValid() ? "VALID" : "INVALID");
 
         } catch (Exception e) {
-            System.err.println("Validation Error: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Validation Error", e);
             result.setValid(false);
             result.addValidation("SYSTEM_ERROR", "ERROR", e.getMessage());
         }

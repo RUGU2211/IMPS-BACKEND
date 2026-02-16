@@ -42,10 +42,7 @@ public class NpciSocketClient {
         String protocol = useSsl ? "SSL/TLS" : "TCP";
         Socket socket = null;
         try {
-            System.out.println("==========================================");
-            System.out.println("[IMPS] OPENING CONNECTION TO NPCI");
-            System.out.println("Protocol: " + protocol + " | Host: " + host + " | Port: " + port);
-            System.out.println("==========================================");
+            log.info("[IMPS] Opening connection to NPCI: {} | {}:{}", protocol, host, port);
             
             if (useSsl) {
                 var ctx = SslConfig.buildClientContext(
@@ -55,23 +52,22 @@ public class NpciSocketClient {
                 sslSocket.connect(new InetSocketAddress(host, port), connectTimeout);
                 sslSocket.startHandshake();
                 socket = sslSocket;
-                System.out.println("[IMPS] SSL/TLS handshake completed with NPCI");
+                log.debug("[IMPS] SSL/TLS handshake completed with NPCI");
             } else {
                 socket = new Socket();
                 socket.connect(new InetSocketAddress(host, port), connectTimeout);
-                System.out.println("[IMPS] TCP connection established with NPCI");
+                log.debug("[IMPS] TCP connection established with NPCI");
             }
             
             socket.setSoTimeout(readTimeout);
             try (DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                  DataInputStream in = new DataInputStream(socket.getInputStream())) {
                 byte[] payload = respXml.getBytes(StandardCharsets.UTF_8);
-                System.out.println("[IMPS] Sending XML response to NPCI (" + payload.length + " bytes)");
+                log.debug("[IMPS] Sending XML response to NPCI ({} bytes)", payload.length);
                 out.writeInt(payload.length);
                 out.write(payload);
                 out.flush();
                 
-                System.out.println("[IMPS] Waiting for ACK from NPCI...");
                 int ackLen = in.readInt();
                 if (ackLen <= 0 || ackLen > MAX_ACK_SIZE) {
                     log.warn("[IMPS] Invalid ACK length from NPCI: {}", ackLen);
@@ -79,7 +75,7 @@ public class NpciSocketClient {
                 }
                 byte[] ackPayload = new byte[ackLen];
                 in.readFully(ackPayload);
-                System.out.println("[IMPS] ACK received from NPCI (" + ackPayload.length + " bytes)");
+                log.debug("[IMPS] ACK received from NPCI ({} bytes)", ackPayload.length);
                 return true;
             }
         } catch (IOException e) {

@@ -1,0 +1,25 @@
+# IMPS – Troubleshooting Guide
+
+## Socket Issues
+
+| Issue | Fix |
+|-------|-----|
+| Connection refused | Ensure IMPS is running, socket.enabled=true, correct port (9083/9443) |
+| ACK instead of Resp | Use 35-char msgId and Txn id (Rules 021/022) |
+| No response / timeout | mock_switch running? mock_npci running (compliant flow)? response-timeout 60s? |
+| Invalid length | Length = 4 bytes big-endian, matching XML byte count |
+
+## SSL/TLS
+
+| Issue | Fix |
+|-------|-----|
+| Keystore tampered / wrong password | Use password `IMPS-Backend`; regenerate certs |
+| Classpath resource not found | Use `file:../certs/...` when running from module dir |
+| SSL handshake failure | Ensure truststore contains IMPS cert (or mTLS both ways) |
+
+## Database
+
+| Issue | Fix |
+|-------|-----|
+| Connection refused | PostgreSQL running on 5432? |
+| Schema missing | Run sql/imps_full_schema.sql, sql/switch_full_schema.sql |

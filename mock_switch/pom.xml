@@ -80,6 +80,13 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
+
+        <!-- Load .env file for local development (copy .env.example to .env) -->
+        <dependency>
+            <groupId>me.paulschwarz</groupId>
+            <artifactId>springboot3-dotenv</artifactId>
+            <version>5.1.0</version>
+        </dependency>
     </dependencies>
 
     <build>

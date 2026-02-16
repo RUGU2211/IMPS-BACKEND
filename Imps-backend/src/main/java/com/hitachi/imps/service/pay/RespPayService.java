@@ -1,6 +1,8 @@
 package com.hitachi.imps.service.pay;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ import com.hitachi.imps.util.IsoUtil;
 @Service
 public class RespPayService {
 
+    private static final Logger log = LoggerFactory.getLogger(RespPayService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -42,8 +45,7 @@ public class RespPayService {
         try {
             processFromNpci(xml, pathTxnId, null);
         } catch (Exception e) {
-            System.err.println("RespPayService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespPayService (NPCI) ERROR", e);
         }
     }
 
@@ -52,8 +54,7 @@ public class RespPayService {
         try {
             processFromNpci(xml, pathTxnId, reqMsgId);
         } catch (Exception e) {
-            System.err.println("RespPayService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespPayService (NPCI) ERROR", e);
         }
     }
 
@@ -78,8 +79,7 @@ public class RespPayService {
         try {
             processFromSwitch(isoBytes, pathTxnId);
         } catch (Exception e) {
-            System.err.println("RespPayService (Switch) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("RespPayService (Switch) ERROR", e);
         }
     }
 
@@ -93,7 +93,7 @@ public class RespPayService {
             respCodeVal = iso.getString(39);
             approvalNumVal = iso.getString(38);
         } catch (Exception e) {
-            System.err.println("Error extracting ISO fields: " + e.getMessage());
+            log.warn("Error extracting RespPay ISO fields", e);
         }
         final String respCode = respCodeVal;
         final String approvalNum = approvalNumVal;
@@ -109,7 +109,7 @@ public class RespPayService {
                 transactionService.findOptionalByTxnId(lookupId).ifPresent(txn -> {
                     TransactionValidationService.ValidationResult vr = validationService.validateTransaction(iso, txn);
                     if (!vr.isValid())
-                        vr.getValidations().forEach((k, v) -> System.out.println("  " + k + ": " + v));
+                        vr.getValidations().forEach((k, v) -> log.debug("Validation {}: {}", k, v));
                     if ("00".equals(respCode))
                         transactionService.markSuccess(txn, xml, approvalNum, null);
                     else
@@ -117,7 +117,7 @@ public class RespPayService {
                 });
             }
         } catch (Exception e) {
-            System.err.println("Error updating transaction: " + e.getMessage());
+            log.error("Error updating RespPay transaction", e);
         }
 
         auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_OUT", xml);
@@ -129,7 +129,7 @@ public class RespPayService {
             else
                 npciRestClient.sendRespPay(xml);
         } catch (Exception e) {
-            System.out.println("NPCI not available: " + e.getMessage());
+            log.warn("NPCI not available: {}", e.getMessage());
         }
     }
 }

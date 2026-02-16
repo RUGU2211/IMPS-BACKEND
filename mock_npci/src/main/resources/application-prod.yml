@@ -1,0 +1,10 @@
+# ===========================================
+# MOCK NPCI – Production Profile
+# ===========================================
+# SPRING_PROFILES_ACTIVE=prod,ssl
+# ===========================================
+
+logging:
+  level:
+    root: INFO
+    com.hitachi: INFO

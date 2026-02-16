@@ -1,0 +1,29 @@
+# IMPS – Certificate Management
+
+## Generate Keystores
+
+```powershell
+cd E:\Hitachi_Project
+.\certs\generate-certs.bat
+```
+
+Creates: imps-keystore.jks, switch-keystore.jks, npci-keystore.jks and truststores.
+
+## Manual keytool
+
+```bash
+keytool -genkeypair -alias imps -keyalg RSA -keysize 2048 -validity 365 \
+  -keystore certs/imps-keystore.jks -storepass IMPS-Backend -keypass IMPS-Backend \
+  -dname "CN=IMPS, OU=Dev, O=Hitachi, L=Mumbai, ST=MH, C=IN"
+```
+
+## Export / Import (truststores)
+
+```bash
+keytool -exportcert -alias imps -keystore certs/imps-keystore.jks -file certs/imps-public.cer -storepass IMPS-Backend
+keytool -importcert -alias imps -file certs/imps-public.cer -keystore certs/client-truststore.jks -storepass IMPS-Backend -noprompt
+```
+
+## Docker
+
+Use profile `docker` for cert paths under `/app/certs`. Mount: `-v ./certs:/app/certs`

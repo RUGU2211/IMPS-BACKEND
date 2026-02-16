@@ -1,0 +1,27 @@
+# XML to ISO 8583 Mapping
+
+## MTI and DE3
+
+| NPCI Message | MTI | DE3 |
+|--------------|-----|-----|
+| ReqPay | 0200 | 400000 |
+| ReqChkTxn | 0200 | 380000 |
+| ReqHbt | 0800 | 831 |
+| ReqValAdd | 0200 | 310000 |
+| ReqListAccPvd | 0200 | (per implementation) |
+
+## Key Fields
+
+| NPCI XML | ISO Field |
+|----------|-----------|
+| Txn @id | DE120 |
+| Amount | DE4 |
+| Payer/Payee account | DE2, DE102, DE103 |
+| IFSC | institution / DE |
+
+## Response Mapping
+
+| NPCI Response | MTI |
+|---------------|-----|
+| RespPay | 0210 |
+| RespHbt | 0810 |

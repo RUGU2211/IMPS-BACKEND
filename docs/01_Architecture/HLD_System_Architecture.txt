@@ -1,0 +1,65 @@
+# IMPS Backend – High-Level Design (HLD)
+
+## 1. System Overview
+
+IMPS Backend sits **between NPCI (National Payments Corporation of India) and the Bank Switch**. It:
+- Talks to **NPCI** in **XML** (REST or TCP socket)
+- Talks to **Switch** in **ISO 8583** (REST or TCP socket)
+- Converts XML ↔ ISO, validates, routes by institution (IFSC/orgId), and persists transactions and audit logs
+
+## 2. Architecture Diagram
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│  NPCI /         │     │  IMPS Backend    │     │  mock_switch    │     │  mock_npci       │
+│  PowerShell     │────▶│  HTTP 8081/8443  │────▶│  HTTP 8082/8444 │     │  HTTP 8083/8445  │
+│  (XML)          │     │  Socket 9083/9443│◀────│  Socket 9084/9444│     │  Socket 9085/9445│
+└─────────────────┘     │  (XML ↔ ISO)     │     │  (ISO)          │     │  (Resp receiver) │
+                        └──────────────────┘     └─────────────────┘     └──────────────────┘
+```
+
+## 3. Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Runtime | Java, Spring Boot |
+| Database | PostgreSQL (imps_db, switch_db) |
+| Message Format | NPCI XML (REST), ISO 8583 (Switch) |
+| Transport | REST (HTTP/HTTPS), TCP Socket (plain/TLS) |
+| Build | Maven |
+
+## 4. Integration Overview
+
+| Integration | Protocol | Format | Port (plain) | Port (TLS) |
+|-------------|----------|--------|--------------|------------|
+| NPCI → IMPS | REST / Socket | XML | 8081 / 9083 | 8443 / 9443 |
+| IMPS → Switch | REST / Socket | ISO 8583 | 8082 / 9084 | 8444 / 9444 |
+| IMPS → NPCI (outbound) | REST / Socket | XML | 8083 / 9085 | 8445 / 9445 |
+| Switch → IMPS (reverse) | Socket | ISO 8583 | 9086 | 9446 |
+
+## 5. Data Flows
+
+### Flow 1: NPCI → IMPS → Switch → IMPS → NPCI
+1. NPCI sends ReqPay/ReqChkTxn/etc. (XML)
+2. IMPS sends ACK, converts to ISO, sends to Switch
+3. Switch responds (ISO)
+4. IMPS converts to XML, sends to NPCI
+
+### Flow 2: Switch → IMPS → NPCI (Reverse)
+1. Switch sends Req (ISO)
+2. IMPS converts to XML, sends to NPCI
+3. NPCI responds (XML)
+4. IMPS converts to ISO, returns to Switch
+
+## 6. Key Components
+
+| Component | Role |
+|-----------|------|
+| ImpsController / NpciController | REST entry points |
+| NpciSocketServer | NPCI socket server (9083/9443) |
+| SwitchSocketServer | Switch reverse-flow socket (9086/9446) |
+| ImpsInboundService | Orchestrates NPCI-originated requests |
+| Req*Service / Resp*Service | Request/response handling |
+| XmlToIsoConverter / IsoToXmlConverter | Format conversion |
+| ISwitchClient / NpciRestClient | Outbound clients |
+| SwitchAddressResolver | Routes by institution (institution_master) |

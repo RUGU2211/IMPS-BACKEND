@@ -1,0 +1,25 @@
+# IMPS – Sample Request Bodies
+
+See **[IMPS_Req_API_Bodies.txt](IMPS_Req_API_Bodies.txt)** for full copy-paste XML bodies with placeholders.
+
+## Placeholder Reference
+
+| Placeholder | Example |
+|-------------|---------|
+| {baseUrl} | https://192.168.1.38:8443 |
+| {txnId}, {msgId} | 35 chars (3 BPC + 32) |
+| {orgId} | BANK01 |
+| {ts} | 2026-01-25T10:30:00.000+05:30 |
+
+## Quick Example – ReqHbt
+
+```xml
+<upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/">
+    <Head ver="1.0" ts="2026-02-06T10:00:00+05:30" orgId="BANK01" msgId="HBT00000000000000000000000000000001"/>
+    <Txn id="HBT00000000000000000000000000000001" note="Heartbeat" refId="1" refUrl="https://npci.org.in/" ts="2026-02-06T10:00:00+05:30" type="Hbt"/>
+    <HbtMsg type="ALIVE" value="NA"/>
+</upi:ReqHbt>
+```
+
+Path: `POST {baseUrl}/imps/reqhbt/{txnId}`  
+Content-Type: `application/xml`

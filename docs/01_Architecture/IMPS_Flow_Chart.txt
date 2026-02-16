@@ -178,8 +178,66 @@ NPCI (ReqPay XML) → IMPS 9083 → [ACK] → NPCI closes
 
 ---
 
-9. References
+9. Full IMPS Backend Project Flow (Internal Architecture)
 
 
-- SOCKET_GUIDE.md (../socket/SOCKET_GUIDE.txt) – Protocol, ACK flow, PowerShell APIs
-- PROJECT_CONNECTIONS.md (../PROJECT_CONNECTIONS.txt) – Ports, config, database
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                              ENTRY POINTS                                                                 │
+│  ImpsController (/imps)    NpciController (/npci)    NpciSocketServer (9083/9443)    SwitchSocketServer (9086/9446)  │
+│  POST XML/ISO by Content-Type              Same as Imps XML              [4 bytes][XML]                   [4 bytes][ISO]  │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                    │
+                                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                         IMPS INBOUND ORCHESTRATION (NPCI XML only)                                        │
+│  ImpsInboundService: extract msgId/txnId → validate txnId → validate message → AckSender.send(ACK)       │
+│  → ReqPayService.processFromNpci / ReqChkTxnService / ReqHbtService / ReqValAddService / ReqListAccPvd   │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                    │
+                    ┌───────────────────────────────┼───────────────────────────────┐
+                    ▼                               ▼                               ▼
+┌─────────────────────────────┐  ┌─────────────────────────────┐  ┌─────────────────────────────────────┐
+│  REQ* SERVICES              │  │  CONVERTERS                 │  │  ROUTING & CLIENTS                  │
+│  ReqPayService              │  │  XmlToIsoConverter          │  │  SwitchAddressResolver              │
+│  ReqChkTxnService           │  │  IsoToXmlConverter          │  │    → institution_master (IFSC/orgId)│
+│  ReqHbtService              │  │  (XML ↔ ISO 8583)           │  │  ISwitchClient (REST/Socket)        │
+│  ReqValAddService           │  │                             │  │  NpciRestClient                     │
+│  ReqListAccPvdService       │  │                             │  │  PendingSocketResponseStore         │
+└─────────────────────────────┘  └─────────────────────────────┘  └─────────────────────────────────────┘
+                    │                               │                               │
+                    └───────────────────────────────┼───────────────────────────────┘
+                                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                         PERSISTENCE & AUDIT                                                               │
+│  TransactionService: createRequest → markIsoSent → markSuccess / markFailure                             │
+│  MessageAuditService: saveRaw(txnId, stage, message) – NPCI_*_XML_IN, SWITCH_*_ISO_OUT/IN, NPCI_*_XML_OUT  │
+│  Tables: transaction (imps_db), message_audit_log (imps_db)                                              │
+└─────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Flow A – NPCI → IMPS → Switch → IMPS → NPCI (Request flow):
+  1. NPCI sends ReqPay XML (REST or Socket) → ImpsInboundService.handleReqPay
+  2. ACK sent immediately; ReqPayService.processFromNpci (async)
+  3. XmlToIsoConverter → ISO; SwitchAddressResolver (orgId → switch host:port)
+  4. ISwitchClient.sendReqPay (REST or Socket) → mock_switch
+  5. Switch returns Resp ISO → IsoToXmlConverter → XML
+  6. TransactionService.markSuccess; NpciRestClient.sendRespPay OR PendingSocketResponseStore.completePending
+
+Flow B – Switch → IMPS → NPCI (Reverse flow):
+  1. Switch sends Req ISO (REST or Socket 9086/9446) → ReqPayService.processFromSwitchSync
+  2. IsoToXmlConverter → XML; NpciRestClient.sendReqPay (sync) → mock_npci
+  3. NPCI returns Resp XML → XmlToIsoConverter → ISO
+  4. Return ISO to Switch
+
+Flow C – Switch → IMPS callback (Resp*):
+  1. Switch sends RespPay ISO → POST /imps/resppay/{txnId}
+  2. RespPayService.processAsync: ISO→XML, update transaction, completePending or NpciRestClient.sendRespPay
+
+---
+
+10. References
+
+
+- [05_Integration/SOCKET_GUIDE.txt](../05_Integration/SOCKET_GUIDE.txt) – Protocol, ACK flow, PowerShell APIs, SSL/TLS
+- [Project_Connections.txt](Project_Connections.txt) – Ports, config, database, connection flow

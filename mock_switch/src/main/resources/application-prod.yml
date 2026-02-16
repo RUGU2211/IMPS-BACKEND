@@ -1,0 +1,21 @@
+# ===========================================
+# MOCK SWITCH – Production Profile
+# ===========================================
+# SPRING_PROFILES_ACTIVE=prod,ssl
+# Prod: ddl validate, show-sql false, INFO logging
+# ===========================================
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.hitachi: INFO
+    org.hibernate.SQL: WARN

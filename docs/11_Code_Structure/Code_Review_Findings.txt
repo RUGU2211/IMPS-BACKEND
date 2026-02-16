@@ -1,6 +1,6 @@
 # Code Review Findings – Hitachi IMPS Project
 
-This document summarizes findings against the requested review criteria. **Recommendations** are either "Change" (you should fix) or "Consider" (optional improvement).
+This document summarizes findings against the requested review criteria, verified against the current codebase (Imps-backend, mock_switch, mock_npci). **Recommendations** are either "Change" (you should fix) or "Consider" (optional improvement).
 
 ---
 
@@ -27,10 +27,10 @@ This document summarizes findings against the requested review criteria. **Recom
 | Unnecessary comments | OK | No obvious noise. |
 | Commented-out code | OK | None found. |
 | Duplicate logic | OK | Shared utilities (IsoUtil, XmlUtil); some console logging repeated. |
-| Method length | OK | Most methods &lt; 50 lines. |
+| Method length | OK | Most methods < 50 lines. |
 | Indentation & formatting | OK | Consistent. |
 
-**Recommendation:** Consider extracting repeated `System.out.println("====...")` patterns into a small logging helper if you want to reduce duplication.
+**Recommendation:** Replace `System.out.println` with slf4j logger in **TransactionValidationService** and **AsyncConfig**; consider extracting repeated banner patterns into a logging helper.
 
 ---
 
@@ -53,7 +53,7 @@ This document summarizes findings against the requested review criteria. **Recom
 
 | Item | Status | Notes / Recommendation |
 |------|--------|------------------------|
-| Hardcoded credentials | **Change** | Default passwords in Java config (e.g. `SslConfig`, `RoutingConfig`, `NpciSocketConfig`, mock_switch/mock_npci `SslConfig`) use fallback `"IMPS-Backend"` / `"root"`. **Recommendation:** Keep defaults only for local dev; in production use env vars (e.g. `SPRING_DATASOURCE_PASSWORD`, `SSL_KEY_STORE_PASSWORD`) and do not commit real secrets. Document in README or deployment guide. |
+| Hardcoded credentials | **Change** | Default passwords in Java config (e.g. `SslConfig`, `RoutingConfig`, `NpciSocketConfig`, mock_switch/mock_npci `SslConfig`) use fallback `"IMPS-Backend"` / `"root"`. **Recommendation:** Keep defaults only for local dev; in production use env vars (e.g. `SPRING_DATASOURCE_PASSWORD`, `SSL_KEY_STORE_PASSWORD`) and do not commit real secrets. Document in [08_Deployment_and_DevOps/Deployment_Guide.txt](../08_Deployment_and_DevOps/Deployment_Guide.txt) or [06_Security/Certificate_Management.txt](../06_Security/Certificate_Management.txt). |
 | API keys in source | OK | None found. |
 | SQL injection | OK | JPA methods and parameterized `@Query` (e.g. `existsByBpc`); no string-concatenated SQL. |
 | Input sanitized | OK | XML/ISO parsed via libraries; validation on business fields. |
@@ -63,7 +63,7 @@ This document summarizes findings against the requested review criteria. **Recom
 | Auth & authorization | N/A | No REST auth in current scope; socket is TLS/mTLS. |
 | CORS | **Consider** | Not explicitly configured in reviewed files. If frontend calls these APIs, configure CORS. |
 
-**Recommendation:** Document production credential handling; consider masking sensitive fields in logs for production.
+**Recommendation:** Document production credential handling in deployment guide; consider masking sensitive fields in logs for production.
 
 ---
 
@@ -71,12 +71,12 @@ This document summarizes findings against the requested review criteria. **Recom
 
 | Item | Status | Notes / Recommendation |
 |------|--------|------------------------|
-| Empty catch blocks | **Change** | Several `catch (IOException ignored) {}` and `catch (InterruptedException ignored) {}` in socket server `stop()` and `close()`. **Recommendation:** At least log at DEBUG/TRACE (e.g. `log.debug("Socket close failed", e)`) so the block is not "empty" and failures are visible when needed. |
-| Custom exceptions | OK | DuplicateTxnIdException, ReqPayValidationException, CommonCodeValidationException, etc. |
+| Empty catch blocks | **Change** | Empty `catch (IOException ignored) {}` and `catch (InterruptedException ignored) {}` in **mock_npci NpciSocketServer** (3 places); `catch (ISOException ignored) {}` in **mock_switch SwitchSocketServer** (1 place). **Recommendation:** Add `log.debug("Socket close failed", e)` so failures are diagnosable. |
+| Custom exceptions | OK | DuplicateTxnIdException, ReqPayValidationException, CommonCodeValidationException, etc. See [09_Error_and_Exception_Handling/Error_Code_Definitions.txt](../09_Error_and_Exception_Handling/Error_Code_Definitions.txt). |
 | HTTP status codes | OK | GlobalExceptionHandler returns 400, 409, etc., as appropriate. |
 | Error responses standardized | OK | XML error format and RespPay failure structure. |
 | Meaningful messages | OK | Exception messages and error payloads are meaningful. |
-| Stack trace to user | **Change** | `e.printStackTrace()` is used in several places (socket clients, services). Stack traces go to stderr and can end up in logs; they should not be returned in API responses. **Recommendation:** Replace with `log.error("message", e)` and ensure generic exception handler does not expose stack trace to client (current handler does not; it returns a generic message). |
+| Stack trace to user | **Change** | `e.printStackTrace()` used in 10 places: **ReqPayService** (3), **RespPayService** (3), **RespChkTxnService** (3), **TransactionValidationService** (1). Replace with `log.error("message", e)`. GlobalExceptionHandler correctly does not expose stack trace to client. |
 
 **Recommendation:** Replace all `printStackTrace()` with logger calls; add debug log in currently empty catch blocks for shutdown/close.
 
@@ -88,7 +88,7 @@ This document summarizes findings against the requested review criteria. **Recom
 |------|--------|--------|
 | HTTP methods | OK | POST for all request/response endpoints. |
 | Status codes | OK | 200, 400, 409 used via GlobalExceptionHandler and ResponseEntity. |
-| Endpoint naming | OK | `/imps/{reqtype|resptype}/{txnId}` consistent. |
+| Endpoint naming | OK | `/imps/{reqtype|resptype}/{txnId}` consistent. See [03_API_Documentation/API_Endpoints_List.txt](../03_API_Documentation/API_Endpoints_List.txt). |
 | Request/Response DTO | Partial | XML/String and byte[] used; no dedicated DTOs for all. Acceptable for ISO/XML protocol. |
 | Validation annotations | OK | Validation in services; could add @Valid on DTOs if introduced. |
 | Swagger/OpenAPI | **Consider** | Not present. Add for REST endpoints if needed for documentation and testing. |
@@ -103,7 +103,7 @@ This document summarizes findings against the requested review criteria. **Recom
 |------|--------|--------|
 | Unnecessary loops | OK | No obvious redundant loops. |
 | DB calls inside loops | OK | No DB calls inside loops in reviewed code. |
-| Indexing | OK | SQL schema and JPA usage; institution_master, transaction, etc. have indexes. |
+| Indexing | OK | SQL schema and JPA usage; institution_master, transaction, etc. have indexes. See [04_Database/Schema_Reference.txt](../04_Database/Schema_Reference.txt). |
 | Pagination | N/A | No list APIs returning large result sets in scope. |
 | Caching | **Consider** | Institution/master data could be cached if read heavily. |
 | Memory leaks | OK | Sockets closed in finally; no obvious leaks. |
@@ -132,10 +132,10 @@ This document summarizes findings against the requested review criteria. **Recom
 
 | Item | Status | Notes |
 |------|--------|--------|
-| Unit tests | **Consider** | No unit tests found in the provided tree. |
+| Unit tests | **Consider** | Only `ImpsBackendApplicationTests` (context loads). No tests for ReqPay, RespPay, validation, converters, or other services. |
 | Edge / negative cases | **Consider** | Add tests for validation, error paths, and ISO/XML parsing. |
 | Mocking | **Consider** | Use mocks for repositories and external clients in tests. |
-| Coverage | **Consider** | Aim for &gt;70% on core business logic (e.g. ReqPay, AccountLedger, validation). |
+| Coverage | **Consider** | Aim for >70% on core business logic (e.g. ReqPay, AccountLedger, validation). |
 | Integration tests | **Consider** | Optional for socket/REST flows. |
 
 **Recommendation:** Add unit tests for services (pay, chktxn, valadd, listaccpvd, validation) and critical utilities; add integration tests if required for release.
@@ -148,7 +148,7 @@ This document summarizes findings against the requested review criteria. **Recom
 |------|--------|--------|
 | Idempotency | OK | txn_id uniqueness and duplicate handling (DuplicateTxnIdException, NpciDuplicateTxnException). |
 | Transaction rollback | OK | `@Transactional(rollbackFor = Exception.class)` where needed (e.g. AccountLedgerService). |
-| Timeout configuration | OK | Socket and REST timeouts configured in YAML. |
+| Timeout configuration | OK | Socket and REST timeouts configured in YAML. See [07_Configuration/application_yml_Reference.txt](../07_Configuration/application_yml_Reference.txt). |
 | Retry mechanism | **Consider** | No retry on transient failures (e.g. switch/NPCI socket). Add if required for resilience. |
 | Encryption at rest | **Consider** | DB and keystore encryption is environment/infra concern; document if required. |
 | Encryption in transit | OK | TLS for sockets and HTTPS profile. |
@@ -161,18 +161,26 @@ This document summarizes findings against the requested review criteria. **Recom
 
 ## Summary of Required / Recommended Code Changes
 
-1. **Security:** Use environment variables (or secret manager) for all passwords and keystore credentials in production; document in README or deployment guide. Optionally mask sensitive data in production logs. *(Comment added in Imps-backend application.yml.)*
-2. **Exception handling:** Replace every `e.printStackTrace()` with `log.error("description", e)` (or appropriate level). Add `log.debug`/`log.trace` in catch blocks that currently ignore exceptions (e.g. socket close, awaitTermination). *(Done: printStackTrace removed and replaced with logger; empty catch blocks now use log.debug.)*
-3. **Empty catch blocks:** In socket server `stop()` and socket `close()` in finally, add at least `log.debug("...", e)` so the block is not empty and failures are diagnosable. *(Done.)*
-4. **Testing:** Add unit tests for core services and validation; aim for &gt;70% coverage on business logic.
-5. **Optional:** Add Swagger/OpenAPI, CORS configuration if a frontend will call the APIs, and retry for external calls if required.
+1. **Security:** Use environment variables (or secret manager) for passwords and keystore credentials in production. `application.yml` currently has `password: root` and `trust-store-password: IMPS-Backend`. Document env vars (e.g. `SPRING_DATASOURCE_PASSWORD`, `SSL_KEY_STORE_PASSWORD`) in [08_Deployment_and_DevOps/Deployment_Guide.txt](../08_Deployment_and_DevOps/Deployment_Guide.txt) or [06_Security/Certificate_Management.txt](../06_Security/Certificate_Management.txt).
+2. **Exception handling:** Replace all 10 occurrences of `e.printStackTrace()` with `log.error("description", e)` in: ReqPayService, RespPayService, RespChkTxnService, TransactionValidationService.
+3. **Empty catch blocks:** Add `log.debug("...", e)` in: mock_npci NpciSocketServer (IOException x2, InterruptedException), mock_switch SwitchSocketServer (ISOException).
+4. **Logging:** Replace `System.out.println` with slf4j logger in TransactionValidationService and AsyncConfig.
+5. **Testing:** Add unit tests for ReqPay, RespPay, validation, converters; aim for >70% coverage on business logic.
+6. **Optional:** Add Swagger/OpenAPI, CORS if needed, retry for external calls.
 
 ---
 
 ## Files to Touch (for above changes)
 
-- **Imps-backend:** GlobalExceptionHandler (already uses log for generic exception; no change needed for response). Socket clients and socket servers: replace printStackTrace with log; add debug log in empty catch. Config: document env vars for credentials (README or application.yml comments).
-- **mock_switch:** Same: replace printStackTrace with log in MockResponseService, AccountLedgerService, SwitchSocketServer; add debug in empty catch. SslConfig: document credential override.
-- **mock_npci:** Same pattern for SslConfig and NpciSocketServer if present.
+| Module | File | Change |
+|--------|------|--------|
+| **Imps-backend** | ReqPayService.java | Replace 3× printStackTrace with log.error |
+| **Imps-backend** | RespPayService.java | Replace 3× printStackTrace with log.error |
+| **Imps-backend** | RespChkTxnService.java | Replace 3× printStackTrace with log.error |
+| **Imps-backend** | TransactionValidationService.java | Replace 1× printStackTrace and System.out with logger |
+| **Imps-backend** | AsyncConfig.java | Replace System.out with logger |
+| **Imps-backend** | application.yml | Add comments for env vars (SPRING_DATASOURCE_PASSWORD, etc.) |
+| **mock_switch** | SwitchSocketServer.java | Add log.debug in empty catch (ISOException) |
+| **mock_npci** | NpciSocketServer.java | Add log.debug in 3× empty catch (IOException, InterruptedException) |
 
-No architectural or functional bugs were identified; the main improvements are security (credentials, logging), exception handling (no empty catch, no printStackTrace), and adding tests.
+**Status:** No architectural or functional bugs identified. Pending: exception handling (printStackTrace, empty catch), logging (System.out), security docs, unit tests.

@@ -1,0 +1,21 @@
+# ===========================================
+# MOCK SWITCH – Development Profile
+# ===========================================
+# SPRING_PROFILES_ACTIVE=dev,ssl
+# Dev: ddl update, show-sql, DEBUG logging
+# ===========================================
+
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    root: INFO
+    com.hitachi: DEBUG
+    org.hibernate.SQL: DEBUG

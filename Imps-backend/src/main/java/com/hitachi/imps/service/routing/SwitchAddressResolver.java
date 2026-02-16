@@ -2,6 +2,9 @@ package com.hitachi.imps.service.routing;
 
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.hitachi.imps.entity.InstitutionMaster;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,8 @@ import com.hitachi.imps.repository.InstitutionMasterRepository;
  */
 @Service
 public class SwitchAddressResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(SwitchAddressResolver.class);
 
     @Autowired
     private InstitutionMasterRepository institutionRepo;
@@ -54,12 +59,9 @@ public class SwitchAddressResolver {
         if (inst == null) return;
         String host = inst.getSwitchIp() != null && !inst.getSwitchIp().isBlank() ? inst.getSwitchIp() : defaultHost;
         String port = inst.getSwitchPort() != null && !inst.getSwitchPort().isBlank() ? inst.getSwitchPort() : defaultPort;
-        System.out.println("[IMPS] Switch connection FAILED (institution_master): id=" + inst.getId()
-            + " name=\"" + (inst.getName() != null ? inst.getName() : "") + "\""
-            + " request_org_id=" + (inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "")
-            + " bank_code=" + (inst.getBankCode() != null ? inst.getBankCode() : "")
-            + " switch_ip=" + host + " switch_port=" + port
-            + " | DB switch_status=FAILED");
+        log.warn("[IMPS] Switch connection FAILED (institution_master): id={} name=\"{}\" request_org_id={} bank_code={} switch_ip={} switch_port={} | DB switch_status=FAILED",
+            inst.getId(), inst.getName() != null ? inst.getName() : "", inst.getRequestOrgId() != null ? inst.getRequestOrgId() : "",
+            inst.getBankCode() != null ? inst.getBankCode() : "", host, port);
     }
 
     /**

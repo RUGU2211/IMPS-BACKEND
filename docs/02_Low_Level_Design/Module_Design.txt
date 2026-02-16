@@ -1,0 +1,64 @@
+# IMPS Backend – Module Design (LLD)
+
+## 1. Entry Points
+
+| File | Purpose |
+|------|---------|
+| ImpsController | REST `/imps/*` – XML (NPCI) or ISO (Switch) by Content-Type |
+| NpciController | REST `/npci/*` – Same as Imps XML flow |
+| NpciSocketServer | Socket 9083/9443 – [4 bytes][XML] |
+| SwitchSocketServer | Socket 9086/9446 – [4 bytes][ISO] |
+
+## 2. Orchestration
+
+| File | Purpose |
+|------|---------|
+| ImpsInboundService | Extracts msgId/txnId, validates, sends ACK, dispatches to Req*Service |
+| SocketRequestDispatcher | Routes socket XML to correct Req*Service |
+
+## 3. Request/Response Services
+
+| Service | Message Types | Flow |
+|---------|---------------|------|
+| ReqPayService | ReqPay, RespPay | NPCI↔Switch, XML↔ISO |
+| ReqChkTxnService / RespChkTxnService | ReqChkTxn, RespChkTxn | Same pattern |
+| ReqHbtService | ReqHbt (0800/0810) | Heartbeat |
+| ReqValAddService / RespValAddService | ReqValAdd, RespValAdd | Name enquiry |
+| ReqListAccPvdService / RespListAccPvdService | ReqListAccPvd, RespListAccPvd | List providers |
+
+## 4. Converters
+
+| File | Purpose |
+|------|---------|
+| XmlToIsoConverter | NPCI XML → ISO 8583 (0200, 0210, 0800, 0810) |
+| IsoToXmlConverter | ISO 8583 → NPCI XML |
+
+## 5. Clients and Routing
+
+| File | Purpose |
+|------|---------|
+| ISwitchClient (RestSwitchClient, SocketSwitchClient) | Sends ISO to Switch |
+| NpciRestClient | Sends XML to NPCI |
+| SwitchAddressResolver | Resolves switch host/port by request_org_id (institution_master) |
+
+## 6. Persistence
+
+| File | Purpose |
+|------|---------|
+| TransactionService | transaction table – createRequest, markIsoSent, markSuccess, markFailure |
+| MessageAuditService | message_audit_log – saveRaw, saveRawBytesWithParsed |
+
+## 7. Socket State
+
+| File | Purpose |
+|------|---------|
+| PendingSocketResponseStore | txnId → CompletableFuture; links async Switch response to NPCI socket thread |
+| INpciResponseSender / PendingSocketResponseSender | Sends response back to NPCI (socket or REST) |
+
+## 8. Validation
+
+| File | Purpose |
+|------|---------|
+| XmlParsingService | Extract msgId, txnId, orgId from XML |
+| ReqPayValidationService | ReqPay-specific rules |
+| CommonCodeValidationService | Head/Txn validation |

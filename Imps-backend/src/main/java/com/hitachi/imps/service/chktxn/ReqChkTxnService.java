@@ -1,5 +1,7 @@
 package com.hitachi.imps.service.chktxn;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -28,6 +30,7 @@ import com.hitachi.imps.exception.CommonCodeValidationException;
 @Service
 public class ReqChkTxnService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReqChkTxnService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -46,12 +49,12 @@ public class ReqChkTxnService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqChkTxnService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("ReqChkTxnService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqChkTxnService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("ReqChkTxnService (NPCI) error", e); }
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
@@ -73,7 +76,7 @@ public class ReqChkTxnService {
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPCHKTXN_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciRestClient.sendRespChkTxn(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespChkTxn(errResp, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -88,7 +91,7 @@ public class ReqChkTxnService {
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPCHKTXN_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciRestClient.sendRespChkTxn(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespChkTxn(errResp, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -104,7 +107,7 @@ public class ReqChkTxnService {
             String approvalNum = extractApprovalNum(response);
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciRestClient.sendRespChkTxn(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespChkTxn(respXml, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
         } else {
             transactionService.markFailure(txn, null);
             String errAck = ackService.buildAckWithFallback("RespChkTxn", msgId, txnId);
@@ -126,7 +129,7 @@ public class ReqChkTxnService {
 
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
-        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { System.err.println("ReqChkTxnService (Switch) ERROR: " + e.getMessage()); }
+        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { log.error("ReqChkTxnService (Switch) error", e); }
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
@@ -146,11 +149,11 @@ public class ReqChkTxnService {
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("IMPS: ReqChkTxn from Switch – institution invalid: " + instErr);
+                log.warn("IMPS: ReqChkTxn from Switch – institution invalid: {}", instErr);
                 return null;
             }
         } catch (Exception e) {
-            System.err.println("IMPS: ReqChkTxn from Switch – could not validate IFSC: " + e.getMessage());
+            log.error("IMPS: ReqChkTxn from Switch – could not validate IFSC", e);
             return null;
         }
         String reqXml = isoToXmlConverter.convertReqChkTxnToXml(isoBytes);
@@ -158,7 +161,7 @@ public class ReqChkTxnService {
         try {
             commonCodeValidationService.validateCommonHeadTxn(reqXml);
         } catch (CommonCodeValidationException e) {
-            System.out.println("[IMPS] ReqChkTxn from Switch – validation failed: " + e.getMessage());
+            log.warn("[IMPS] ReqChkTxn from Switch – validation failed: {}", e.getMessage());
             String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
             com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml, "CHKTXN");
             String errResp = ackService.buildFailureRespChkTxn(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
@@ -171,7 +174,7 @@ public class ReqChkTxnService {
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciRestClient.sendReqChkTxn(reqXml, txnId) : npciRestClient.sendReqChkTxn(reqXml);
         } catch (Exception e) {
-            System.err.println("NPCI not available: " + e.getMessage());
+            log.warn("NPCI not available: {}", e.getMessage());
             transactionService.markFailure(txn, null);
             return null;
         }
@@ -188,7 +191,7 @@ public class ReqChkTxnService {
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             return respBytes;
         } catch (Exception e) {
-            System.err.println("IMPS: RespChkTxn XML to ISO failed: " + e.getMessage());
+            log.error("IMPS: RespChkTxn XML to ISO failed", e);
             transactionService.markFailure(txn, null);
             return null;
         }

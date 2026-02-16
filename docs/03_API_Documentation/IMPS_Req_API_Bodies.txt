@@ -1,14 +1,14 @@
 IMPS Request APIs – Copy-Paste Bodies with {placeholders}
 
 
-This doc covers two flows only: (1) NPCI → IMPS (XML request bodies below) and (2) Switch → IMPS (binary ISO; see SOCKET_GUIDE.txt (../socket/SOCKET_GUIDE.txt)).
+This doc covers two flows: (1) NPCI → IMPS (XML request bodies below) and (2) Switch → IMPS (binary ISO; see SOCKET_GUIDE.txt in 05_Integration).
 
 Usage: Copy the XML block, then replace each {placeholder} with your value. All IDs must be 35 chars (3 BPC + 32).
 
 Paths: {baseUrl}/imps/{reqtype}/{txnId} — e.g. https://192.168.1.38:8443/imps/reqpay/{txnId}  
 Content-Type: application/xml for NPCI → IMPS. For Switch → IMPS (ISO): application/octet-stream and binary ISO 8583 (no XML body; see socket guide).
 
-Source: NPCI_IMPS_Message_Formats.md (NPCI_IMPS_Message_Formats.txt) | SOCKET_GUIDE.md (../socket/SOCKET_GUIDE.txt)
+Source: NPCI_IMPS_Message_Formats.txt | 05_Integration/SOCKET_GUIDE.txt
 
 ---
 
@@ -39,14 +39,12 @@ Placeholder  Example  Description
 
 ---
 
-Two flows (aligned with Postman)
+Two flows
 
 
 Flow  Direction  Body  Path pattern
 **NPCI - IMPS req flow**  NPCI → IMPS  XML (copy-paste from sections below)  `{baseUrl}/imps/{reqpay,reqchktxn,reqhbt,reqlistaccpvd,reqvaladd}/{txnId}`
-**Switch - IMPS flow**  Switch → IMPS  Binary ISO 8583  Same path; `Content-Type: application/octet-stream`. See [SOCKET_GUIDE.md](../socket/SOCKET_GUIDE.txt).
-
-Postman collection: IMPS API Collection (Dynamic) — folders *NPCI - IMPS req flow* and *Switch - IMPS flow* only.
+**Switch - IMPS flow**  Switch → IMPS  Binary ISO 8583  Same path; `Content-Type: application/octet-stream`. See 05_Integration/SOCKET_GUIDE.txt.
 
 ---
 

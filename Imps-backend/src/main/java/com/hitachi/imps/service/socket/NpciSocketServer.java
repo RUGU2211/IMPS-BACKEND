@@ -128,10 +128,6 @@ public class NpciSocketServer {
         String clientAddr = socket.getRemoteSocketAddress().toString();
         String protocol = socket instanceof SSLSocket ? "SSL/TLS" : "TCP";
         log.info("[IMPS] NPCI socket connected: {} ({})", clientAddr, protocol);
-        System.out.println("==========================================");
-        System.out.println("[IMPS] INCOMING CONNECTION FROM NPCI");
-        System.out.println("Protocol: " + protocol + " | Address: " + clientAddr);
-        System.out.println("==========================================");
         try (DataInputStream in = new DataInputStream(socket.getInputStream());
              DataOutputStream out = new DataOutputStream(socket.getOutputStream())) {
             int maxSize = socketConfig.getMaxXmlSize();
@@ -145,8 +141,7 @@ public class NpciSocketServer {
                 byte[] payload = new byte[length];
                 in.readFully(payload);
                 String xml = new String(payload, StandardCharsets.UTF_8);
-                System.out.println("[IMPS] Req/Resp received from NPCI (socket):");
-                System.out.println(xml);
+                log.debug("[IMPS] Req/Resp received from NPCI (socket): {}", xml);
                 // Single msg_id extraction when request lands (socket entry)
                 String reqMsgId = xmlParsingService.extractMsgId(xml);
                 String txnId = xmlParsingService.extractTxnId(xml);
@@ -200,7 +195,7 @@ public class NpciSocketServer {
             }
         } catch (IOException e) {
             log.debug("[IMPS] NPCI socket closed: {}", clientAddr);
-            System.out.println("[IMPS] Connection closed by NPCI: " + clientAddr + " (" + e.getMessage() + ")");
+            log.debug("[IMPS] Connection closed by NPCI: {} ({})", clientAddr, e.getMessage());
         } catch (Exception e) {
             log.error("[IMPS] NPCI socket error: {}", clientAddr, e);
         } finally {

@@ -1,31 +1,39 @@
-IMPS project documentation
+# IMPS Project Documentation
 
+All documentation is organized in numbered folders. Use this index to navigate.
 
-Quick links
+Environment: Each project (Imps-backend, mock_npci, mock_switch) uses .env for config.
+Copy .env.example to .env in each project folder. Default profile: prod,ssl.
 
+---
 
-Document  Purpose
-[PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.txt)  Ports (HTTP/HTTPS/TCP/TLS), databases, config, socket/HTTP flow
-[POSTMAN.md](POSTMAN.txt)  Postman collection, variables, HTTP/HTTPS, reverse-flow ISO format
-[TESTING_GUIDE.md](TESTING_GUIDE.txt)  HTTP + HTTPS + TCP + TLS testing; run commands (Bash + PowerShell)
-[socket/SOCKET_GUIDE.md](socket/SOCKET_GUIDE.txt)  Socket protocol, PowerShell copy-paste APIs, TLS, troubleshooting
-[socket/SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.txt)  SSL/TLS keytool, OpenSSL, firewall, keystore paths
+## Folder Structure (01–13)
 
-By folder
+| # | Folder | Contents |
+|---|--------|----------|
+| **01** | [01_Architecture](01_Architecture/) | HLD, Deployment Architecture, Project Connections, IMPS Flow Chart |
+| **02** | [02_Low_Level_Design](02_Low_Level_Design/) | Module Design, Flow Diagrams, Implementation Plan, Common Code Specs |
+| **03** | [03_API_Documentation](03_API_Documentation/) | API Endpoints, Sample Requests, IMPS_Req_API_Bodies, NPCI_IMPS_Message_Formats, Error Codes |
+| **04** | [04_Database](04_Database/) | Schema Reference |
+| **05** | [05_Integration](05_Integration/) | NPCI XML Spec, XML-to-ISO Mapping, SOCKET_GUIDE |
+| **06** | [06_Security](06_Security/) | TLS Configuration, Certificate Management |
+| **07** | [07_Configuration](07_Configuration/) | application.yml Reference, Port Config |
+| **08** | [08_Deployment_and_DevOps](08_Deployment_and_DevOps/) | Deployment Guide, Testing Guide |
+| **09** | [09_Error_and_Exception_Handling](09_Error_and_Exception_Handling/) | Error Code Definitions |
+| **10** | [10_Runbook](10_Runbook/) | Production Runbook, Troubleshooting |
+| **11** | [11_Code_Structure](11_Code_Structure/) | Package Structure, Code Review Findings |
 
+---
 
-specs/
+## Quick Links
 
-- NPCI_IMPS_Message_Formats.md – Req/Resp XML structures (authoritative)
-- IMPS_Req_API_Bodies.md – Sample request bodies, test accounts (Rugved, Chetan, Sajid, Madhav)
-- IMPS_Common_Code_Technical_Specifications_Appendix_Rules.md – Common code and rules
-
-guides/
-
-- IMPS_Flow_Chart.md – End-to-end flow diagrams, ACK flow
-- SWITCH_CHECK_DB_LOGGING_GUIDE.md – Switch check (SWITCH_CHECK) logging to transaction and message_audit_log
-
-implementation/
-
-- IMPLEMENTATION_PLAN_NPCI_COMPLIANT_FLOW.md – NPCI-compliant socket flow (phases A–E)
-- IMPLEMENTATION_PLAN_SSL_TLS.md – SSL/TLS implementation plan (phases A–G)
+| Document | Purpose |
+|----------|---------|
+| [HLD_System_Architecture](01_Architecture/HLD_System_Architecture.txt) | High-level design, tech stack |
+| [Project_Connections](01_Architecture/Project_Connections.txt) | Ports, DB, connection flow |
+| [IMPS_Flow_Chart](01_Architecture/IMPS_Flow_Chart.txt) | End-to-end flow diagrams |
+| [SOCKET_GUIDE](05_Integration/SOCKET_GUIDE.txt) | Socket protocol, PowerShell, SSL/TLS |
+| [Testing_Guide](08_Deployment_and_DevOps/Testing_Guide.txt) | HTTP/HTTPS/TCP/TLS testing |
+| [Troubleshooting_Guide](10_Runbook/Troubleshooting_Guide.txt) | Common issues and fixes |
+| [Code_Review_Findings](11_Code_Structure/Code_Review_Findings.txt) | Code review findings and recommendations |
+| [IMPS_BACKEND_CODE_EXPLANATION](IMPS_BACKEND_CODE_EXPLANATION.txt) | In-detail code explanation and data flow |

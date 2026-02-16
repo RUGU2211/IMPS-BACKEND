@@ -1,0 +1,30 @@
+# IMPS – application.yml Reference
+
+All values are read from .env / environment variables. See Environment_Variables.txt.
+
+## Main Sections
+
+| Section | Purpose |
+|---------|---------|
+| server | port from SERVER_PORT (8081 default, 8443 ssl) |
+| spring.datasource | imps_db from SPRING_DATASOURCE_* |
+| spring.jpa | ddl-auto, show-sql from SPRING_JPA_* |
+| logging | levels from LOGGING_LEVEL_* |
+| npci | compliant-flow, socket host/port, trust-store from NPCI_* |
+| routing.npci | base-url from ROUTING_NPCI_BASE_URL |
+| routing.switch | base-url, socket from ROUTING_SWITCH_* |
+| ssl | key-store, trust-store from SSL_* |
+| socket | enabled, server.npci/switch ports |
+| imps | server.host/protocol from IMPS_SERVER_*, org-id from IMPS_ORG_ID |
+
+## Profiles
+
+- **prod,ssl (default):** Production, HTTPS 8443, TLS 9443. Password required.
+- **dev,ssl:** Development, ddl update, show-sql, DEBUG logging
+- **ssl:** HTTPS/TLS (combine with dev or prod)
+- **docker:** cert paths under /app/certs
+
+## Key Env Vars
+
+SPRING_PROFILES_ACTIVE, SERVER_PORT, SPRING_DATASOURCE_*, SPRING_JPA_*,
+LOGGING_LEVEL_*, SSL_*, NPCI_*, ROUTING_*, IMPS_*

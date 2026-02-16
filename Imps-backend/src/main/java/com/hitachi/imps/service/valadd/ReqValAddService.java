@@ -2,6 +2,8 @@ package com.hitachi.imps.service.valadd;
 
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -30,6 +32,7 @@ import com.hitachi.imps.exception.CommonCodeValidationException;
 @Service
 public class ReqValAddService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReqValAddService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -48,12 +51,12 @@ public class ReqValAddService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqValAddService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("ReqValAddService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqValAddService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("ReqValAddService (NPCI) error", e); }
     }
 
     @Transactional
@@ -80,7 +83,7 @@ public class ReqValAddService {
             transactionService.markFailure(txn, respXml);
             auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -95,7 +98,7 @@ public class ReqValAddService {
             transactionService.markFailure(txn, respXml);
             auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -112,13 +115,13 @@ public class ReqValAddService {
                 String approvalNum = extractApprovalNum(response);
                 transactionService.markSuccess(txn, respXml, approvalNum, null);
                 if (sendToNpci(txnId, respXml)) return;
-                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             } else {
                 respXml = buildFailureResponse(msgId, "96", "Switch response timeout");
                 transactionService.markFailure(txn, respXml);
                 auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
                 if (sendToNpci(txnId, respXml)) return;
-                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+                try { npciRestClient.sendRespValAdd(respXml, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             }
             return;
         }
@@ -127,7 +130,7 @@ public class ReqValAddService {
         transactionService.markFailure(txn, respXml);
                 auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", respXml);
         if (sendToNpci(txnId, respXml)) return;
-        try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespValAdd(respXml); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
     }
 
     private boolean sendToNpci(String txnId, String respXml) {
@@ -148,7 +151,7 @@ public class ReqValAddService {
 
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
-        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { System.err.println("ReqValAddService (Switch) ERROR: " + e.getMessage()); }
+        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { log.error("ReqValAddService (Switch) error", e); }
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
@@ -168,11 +171,11 @@ public class ReqValAddService {
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("IMPS: ReqValAdd from Switch – institution invalid: " + instErr);
+                log.warn("IMPS: ReqValAdd from Switch – institution invalid: {}", instErr);
                 return null;
             }
         } catch (Exception e) {
-            System.err.println("IMPS: ReqValAdd from Switch – could not validate IFSC: " + e.getMessage());
+            log.error("IMPS: ReqValAdd from Switch – could not validate IFSC", e);
             return null;
         }
         String reqXml = isoToXmlConverter.convertReqValAddToXml(isoBytes);
@@ -180,7 +183,7 @@ public class ReqValAddService {
         try {
             commonCodeValidationService.validateCommonHeadTxn(reqXml);
         } catch (CommonCodeValidationException e) {
-            System.out.println("[IMPS] ReqValAdd from Switch – validation failed: " + e.getMessage());
+            log.warn("[IMPS] ReqValAdd from Switch – validation failed: {}", e.getMessage());
             String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
             com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml, "VALADD");
             String errResp = ackService.buildFailureRespValAdd(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
@@ -193,7 +196,7 @@ public class ReqValAddService {
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciRestClient.sendReqValAdd(reqXml, txnId) : npciRestClient.sendReqValAdd(reqXml);
         } catch (Exception e) {
-            System.err.println("NPCI not available: " + e.getMessage());
+            log.warn("NPCI not available: {}", e.getMessage());
             transactionService.markFailure(txn, null);
             return null;
         }
@@ -210,7 +213,7 @@ public class ReqValAddService {
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             return respBytes;
         } catch (Exception e) {
-            System.err.println("IMPS: RespValAdd XML to ISO failed: " + e.getMessage());
+            log.error("IMPS: RespValAdd XML to ISO failed", e);
             transactionService.markFailure(txn, null);
             return null;
         }

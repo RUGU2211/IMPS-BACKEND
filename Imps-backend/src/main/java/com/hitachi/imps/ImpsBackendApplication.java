@@ -1,5 +1,7 @@
 package com.hitachi.imps;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -24,15 +26,16 @@ public class ImpsBackendApplication {
         SpringApplication.run(ImpsBackendApplication.class, args);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(ImpsBackendApplication.class);
+
     @Bean
     public ApplicationRunner startupBanner(ImpsServerDisplayInfo displayInfo, Environment env) {
         return args -> {
             String profile = env.getProperty("spring.profiles.active", "default");
-            System.out.println("===========================================");
-            System.out.println("  IMPS Backend Application Started");
-            System.out.println("  " + displayInfo.getBaseUrl());
-            System.out.println("  Profile: " + profile);
-            System.out.println("===========================================");
+            log.info("===========================================");
+            log.info("  IMPS Backend Application Started");
+            log.info("  {} | Profile: {}", displayInfo.getBaseUrl(), profile);
+            log.info("===========================================");
         };
     }
 }

@@ -1,0 +1,17 @@
+# IMPS – Error Code Definitions
+
+## Exceptions (GlobalExceptionHandler)
+
+| Exception | HTTP | When |
+|-----------|------|------|
+| DuplicateTxnIdException | 400 | txnId already exists in transaction table |
+| ReqPayValidationException | 400 | ReqPay validation failed (amount, accounts, etc.) |
+| CommonCodeValidationException | 400 | Head/Txn validation failed for non-Pay messages |
+| Other | 500 | Unhandled errors |
+
+## ISO DE39
+
+| Value | Meaning |
+|-------|---------|
+| 00 | Success |
+| 96 | System malfunction / validation failure |

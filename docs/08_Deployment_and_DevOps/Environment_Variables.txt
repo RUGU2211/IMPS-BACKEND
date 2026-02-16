@@ -1,0 +1,103 @@
+================================================================================
+IMPS Project - Environment Variables
+================================================================================
+
+Each project (Imps-backend, mock_npci, mock_switch) has a .env file in its root.
+Copy .env.example to .env and set values. .env is gitignored – never commit secrets.
+
+Default profile: prod,ssl. For dev: set SPRING_PROFILES_ACTIVE=dev,ssl in .env.
+
+--------------------------------------------------------------------------------
+1. IMPS-BACKEND (.env in Imps-backend/)
+--------------------------------------------------------------------------------
+
+Profile & Server:
+  SPRING_PROFILES_ACTIVE   prod,ssl (default) or dev,ssl
+  SERVER_PORT              8443 (HTTPS) or 8081 (HTTP)
+
+Database (prod requires SPRING_DATASOURCE_PASSWORD – no default):
+  SPRING_DATASOURCE_URL    jdbc:postgresql://host:5432/imps_db
+  SPRING_DATASOURCE_USERNAME
+  SPRING_DATASOURCE_PASSWORD
+
+JPA (prod: validate/false, dev: update/true):
+  SPRING_JPA_HIBERNATE_DDL   validate | update
+  SPRING_JPA_SHOW_SQL        false | true
+  SPRING_JPA_FORMAT_SQL      false | true
+
+Logging:
+  LOGGING_LEVEL_ROOT
+  LOGGING_LEVEL_COM_HITACHI_IMPS   INFO (prod) | DEBUG (dev)
+  LOGGING_LEVEL_ORG_HIBERNATE_SQL  WARN (prod) | DEBUG (dev)
+
+IMPS server (banner/display):
+  IMPS_SERVER_HOST         localhost or actual host
+  IMPS_SERVER_PROTOCOL     https | http
+  IMPS_ORG_ID              BANK01
+
+SSL:
+  SSL_KEY_STORE            file:path/to/imps-keystore.jks
+  SSL_KEY_STORE_PASSWORD
+  SSL_TRUST_STORE
+  SSL_TRUST_STORE_PASSWORD
+
+NPCI:
+  NPCI_SOCKET_HOST
+  NPCI_SOCKET_PORT         9445
+  NPCI_TRUST_STORE
+
+Routing – NPCI:
+  ROUTING_NPCI_BASE_URL    https://host:8445 or http://host:8083
+
+Routing – Switch:
+  ROUTING_SWITCH_BASE_URL
+  ROUTING_SWITCH_SOCKET_HOST
+  ROUTING_SWITCH_SOCKET_PORT
+  ROUTING_SWITCH_SSL_PORT
+  ROUTING_SWITCH_TRUST_STORE
+
+IMPS Switch fallback:
+  IMPS_SWITCH_DEFAULT_HOST
+  IMPS_SWITCH_DEFAULT_PORT
+
+CORS (comma-separated):
+  CORS_ALLOWED_ORIGINS     http://localhost:3000,https://frontend.com
+
+--------------------------------------------------------------------------------
+2. MOCK_NPCI (.env in mock_npci/)
+--------------------------------------------------------------------------------
+
+  SPRING_PROFILES_ACTIVE   prod,ssl (default) or dev,ssl
+  SERVER_PORT              8445 (HTTPS)
+  SSL_KEY_STORE
+  SSL_KEY_STORE_PASSWORD
+
+--------------------------------------------------------------------------------
+3. MOCK_SWITCH (.env in mock_switch/)
+--------------------------------------------------------------------------------
+
+  SPRING_PROFILES_ACTIVE   prod,ssl (default) or dev,ssl
+  SERVER_PORT              8444 (HTTPS)
+  SPRING_DATASOURCE_URL    jdbc:postgresql://host:5432/switch_db
+  SPRING_DATASOURCE_USERNAME
+  SPRING_DATASOURCE_PASSWORD
+  SPRING_JPA_HIBERNATE_DDL   validate | update
+  SPRING_JPA_SHOW_SQL        false | true
+  IMPS_ENABLED             true | false
+  IMPS_IP                  IMPS host
+  IMPS_PORT                8081
+  IMPS_SSL_PORT            8443
+  SSL_KEY_STORE
+  SSL_KEY_STORE_PASSWORD
+
+--------------------------------------------------------------------------------
+4. PRODUCTION CHECKLIST
+--------------------------------------------------------------------------------
+
+- Set SPRING_DATASOURCE_PASSWORD (required; no default in prod)
+- Use strong passwords for SSL_KEY_STORE_PASSWORD, SSL_TRUST_STORE_PASSWORD
+- Set actual NPCI and Switch hosts/URLs (not localhost)
+- Set CORS_ALLOWED_ORIGINS to real frontend origins
+- Prefer secrets manager (Vault, AWS Secrets Manager) for production
+
+================================================================================

@@ -1,0 +1,29 @@
+# IMPS – Database Schema Reference
+
+## imps_db (Imps-backend)
+
+| Table | Purpose |
+|-------|---------|
+| transaction | Transaction state (INIT → ISO_SENT → SUCCESS/FAILED) |
+| message_audit_log | 4-stage audit (NPCI_*_XML_IN, SWITCH_*_ISO_OUT/IN, NPCI_*_XML_OUT) |
+| institution_master | IFSC, routing (switch_ip, switch_port), active flag |
+| account_type_mapping | Account type ↔ ISO code |
+| xml_path_req_pay | ReqPay XPath config |
+| response_xpath | Response XPath config |
+
+## switch_db (mock_switch)
+
+| Table | Purpose |
+|-------|---------|
+| account_master | ValAdd name enquiry; ReqPay debit/credit; balance. See [03_API_Documentation/IMPS_Req_API_Bodies.txt](../03_API_Documentation/IMPS_Req_API_Bodies.txt) for test accounts |
+
+## Schema Files
+
+- `sql/imps_full_schema.sql` – full imps_db schema
+- `sql/switch_full_schema.sql` – full switch_db schema
+
+Run from project root:
+```powershell
+psql -U postgres -d imps_db -f sql/imps_full_schema.sql
+psql -U postgres -d switch_db -f sql/switch_full_schema.sql
+```

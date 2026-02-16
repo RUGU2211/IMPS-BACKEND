@@ -1,5 +1,7 @@
 package com.hitachi.imps.service.listaccpvd;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -18,6 +20,7 @@ import com.hitachi.imps.util.IsoUtil;
 @Service
 public class RespListAccPvdService {
 
+    private static final Logger log = LoggerFactory.getLogger(RespListAccPvdService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private IsoToXmlConverter isoToXmlConverter;
@@ -29,12 +32,12 @@ public class RespListAccPvdService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("RespListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("RespListAccPvdService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("RespListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("RespListAccPvdService (NPCI) error", e); }
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
@@ -50,7 +53,7 @@ public class RespListAccPvdService {
 
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
-        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { System.err.println("RespListAccPvdService (Switch) ERROR: " + e.getMessage()); }
+        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { log.error("RespListAccPvdService (Switch) error", e); }
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
@@ -61,13 +64,13 @@ public class RespListAccPvdService {
         if (pathTxnId != null && !pathTxnId.isBlank()) {
             try {
                 transactionService.findOptionalByTxnId(pathTxnId).ifPresent(txn -> transactionService.markSuccess(txn, xml, null, null));
-            } catch (Exception e) { System.err.println("Error updating ListAccPvd transaction: " + e.getMessage()); }
+            } catch (Exception e) { log.error("Error updating ListAccPvd transaction", e); }
         }
         auditService.saveRaw(txnId, "NPCI_RESPLISTACCPVD_XML_OUT", xml);
         if (pathTxnId != null && pendingSocketStore.completePending(pathTxnId, xml)) return;
         try {
             if (pathTxnId != null && !pathTxnId.isBlank()) npciRestClient.sendRespListAccPvd(xml, pathTxnId);
             else npciRestClient.sendRespListAccPvd(xml);
-        } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+        } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
     }
 }

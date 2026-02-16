@@ -1,0 +1,56 @@
+# IMPS Backend – Flow Diagrams
+
+## 1. Socket Flow – ACK-First (npci.compliant-flow: true)
+
+```
+[4 bytes][XML] – ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  IMPS BACKEND (Socket 9083)                                              │
+│  1. Receive XML → Send ACK (same socket) → NPCI closes                   │
+│  2. Audit, create transaction (INIT)                                     │
+│  3. XmlToIsoConverter → ISO                                              │
+│  4. Connect Switch 9084, send [4 bytes][ISO]                             │
+│  5. Receive [4 bytes][Resp ISO]                                          │
+│  6. Connect mock_npci:9085, send [4 bytes][Resp XML], read ACK, close    │
+└─────────────────────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  MOCK SWITCH (Socket 9084)                                               │
+│  Receive [4 bytes][ISO] → Parse → Build Resp ISO → Send [4 bytes][Resp]  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## 2. Internal Data Flow (ReqPay from NPCI)
+
+```
+ImpsController / NpciSocketServer
+        │
+        ▼
+ImpsInboundService (validate txnId, msgId → send ACK)
+        │
+        ▼
+ReqPayService.processFromNpci
+        │
+        ├── MessageAuditService.saveRaw (NPCI_REQPAY_XML_IN)
+        ├── TransactionService.createRequest (INIT)
+        ├── XmlToIsoConverter.convertReqPay
+        ├── SwitchAddressResolver.resolve(orgId)
+        ├── ISwitchClient.sendReqPay
+        │
+        ▼ (Switch response)
+        │
+        ├── IsoToXmlConverter.convertRespPayToXml
+        ├── TransactionService.markSuccess / markFailure
+        └── NpciRestClient.sendRespPay OR PendingSocketResponseStore.completePending
+```
+
+## 3. Transaction Status Flow
+
+```
+INIT ──(markIsoSent)──▶ ISO_SENT ──(markSuccess)──▶ SUCCESS
+                            │
+                            └──(markFailure)──▶ FAILED
+```

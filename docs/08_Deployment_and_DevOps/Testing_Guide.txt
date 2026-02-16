@@ -23,10 +23,12 @@ Remove-Item certs\*.jks, certs\*.cer -ErrorAction SilentlyContinue
 .\certs\generate-certs.bat
 ```
 
+Environment
+
+Copy .env.example to .env in each project (Imps-backend, mock_npci, mock_switch).
+Default profile: prod,ssl. Configuration is read from .env.
+
 Run commands
-
-
-Configuration is in application.yml. Edit paths if your project location differs from E:/Hitachi_Project.
 
 Linux / Mac (Bash):
 
@@ -144,7 +146,7 @@ TLS  **9446**  [4 bytes][ISO]
 Success: IMPS accepts the connection and returns a response ISO (e.g. 0210 for ReqPay).  
 Connection failure: Cannot connect → check IMPS is running, firewall, and that you are using port 9086 (TCP) or 9446 (TLS) for Switch → IMPS (not 9083/9443, which are for NPCI → IMPS).
 
-Sample ISO binaries for socket testing: use the same files under postman/samples/ (e.g. iso_reqpay.bin). Prepend the 4-byte length (big-endian) before sending. See socket/SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt) for scripts.
+Sample ISO binaries for socket testing: use the same files under postman/samples/ (e.g. iso_reqpay.bin). Prepend the 4-byte length (big-endian) before sending. See 05_Integration/SOCKET_GUIDE.txt for scripts.
 
 Quick checklist
 
@@ -171,7 +173,7 @@ Postman
 3. Variables (HTTPS): Default is HTTPS; use impsBaseUrlHttps: https://localhost:8443. For HTTP, use impsBaseUrl: http://localhost:8081 and run with -Dspring.profiles.active=default. Disable SSL certificate verification in Postman for self-signed certs.
 4. Request format (NPCI → IMPS, XML): POST {{impsBaseUrl}}/imps/{reqtype}/{{txnId}}, Content-Type: application/xml.  
    Example: POST http://localhost:8081/imps/reqpay/PAY00000000000000000000000000000001
-5. Reverse flow (Switch → IMPS, ISO): Use folder Reverse flow - Switch → IMPS (ISO). Body: binary (select ISO 8583 file). Content-Type: application/octet-stream. Response: binary ISO. See POSTMAN.md (POSTMAN.txt).
+5. Reverse flow (Switch → IMPS, ISO): Use folder Reverse flow - Switch → IMPS (ISO). Body: binary (select ISO 8583 file). Content-Type: application/octet-stream. Response: binary ISO. See postman collection (if available).
 
 curl examples
 
@@ -197,7 +199,7 @@ curl -X POST "http://localhost:8081/imps/reqpay/PAY00000000000000000000000000000
 
 Port: 9083
 
-PowerShell (from [SOCKET_GUIDE.md](socket/SOCKET_GUIDE.txt))
+PowerShell (from 05_Integration/SOCKET_GUIDE.txt)
 
 
 1. Define the helper (compliant flow – read once):
@@ -231,7 +233,7 @@ $xml = '<upi:ReqHbt xmlns:upi="http://npci.org/upi/schema/"><Head ver="1.0" ts="
 Send-SocketXml-Compliant -HostParam localhost -PortParam 9083 -Xml $xml
 ```
 
-Expected: ACK XML. For ReqPay/ReqChkTxn/ReqValAdd, mock_switch must be running and IDs must be 35 chars. Full scripts are in SOCKET_GUIDE.md (socket/SOCKET_GUIDE.txt).
+Expected: ACK XML. For ReqPay/ReqChkTxn/ReqValAdd, mock_switch must be running and IDs must be 35 chars. Full scripts are in 05_Integration/SOCKET_GUIDE.txt.
 
 ---
 
@@ -344,9 +346,8 @@ Reference
 
 
 Document  Purpose
-[POSTMAN.md](POSTMAN.txt)  Postman collection, variables (HTTP/HTTPS), folders, reverse-flow ISO format
-[PROJECT_CONNECTIONS.md](PROJECT_CONNECTIONS.txt)  Ports (HTTP/HTTPS/TCP/TLS), DB, config
-[SOCKET_GUIDE.md](socket/SOCKET_GUIDE.txt)  Full socket protocol and PowerShell scripts
-[SOCKET_SSL_TLS.md](socket/SOCKET_SSL_TLS.txt)  TLS keytool, OpenSSL, firewall
-[IMPS_Req_API_Bodies.md](specs/IMPS_Req_API_Bodies.txt)  Sample request bodies, test accounts
-[NPCI_IMPS_Message_Formats.md](specs/NPCI_IMPS_Message_Formats.txt)  Req/Resp XML structures
+Postman collection  Postman collection, variables (HTTP/HTTPS), folders, reverse-flow ISO format
+[01_Architecture/Project_Connections.txt](../01_Architecture/Project_Connections.txt)  Ports (HTTP/HTTPS/TCP/TLS), DB, config
+[05_Integration/SOCKET_GUIDE.txt](../05_Integration/SOCKET_GUIDE.txt)  Full socket protocol and PowerShell scripts (incl. TLS)
+[03_API_Documentation/IMPS_Req_API_Bodies.txt](../03_API_Documentation/IMPS_Req_API_Bodies.txt)  Sample request bodies, test accounts
+[03_API_Documentation/NPCI_IMPS_Message_Formats.txt](../03_API_Documentation/NPCI_IMPS_Message_Formats.txt)  Req/Resp XML structures

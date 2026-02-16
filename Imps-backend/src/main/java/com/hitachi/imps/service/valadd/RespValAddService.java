@@ -1,5 +1,7 @@
 package com.hitachi.imps.service.valadd;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -21,6 +23,7 @@ import com.hitachi.imps.util.IsoUtil;
 @Service
 public class RespValAddService {
 
+    private static final Logger log = LoggerFactory.getLogger(RespValAddService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -34,12 +37,12 @@ public class RespValAddService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("RespValAddService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("RespValAddService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("RespValAddService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("RespValAddService (NPCI) error", e); }
     }
 
     public void processFromNpci(String xml, String pathTxnId) {
@@ -58,7 +61,7 @@ public class RespValAddService {
 
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
-        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { System.err.println("RespValAddService (Switch) ERROR: " + e.getMessage()); }
+        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { log.error("RespValAddService (Switch) error", e); }
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
@@ -70,7 +73,7 @@ public class RespValAddService {
             if (iso.hasField(120)) origTxnId = iso.getString(120);
             if (iso.hasField(39)) respCodeVal = iso.getString(39);
             if (iso.hasField(38)) approvalNumVal = iso.getString(38);
-        } catch (Exception e) { System.err.println("Error extracting RespValAdd ISO: " + e.getMessage()); }
+        } catch (Exception e) { log.error("Error extracting RespValAdd ISO", e); }
         final String responseCode = respCodeVal;
         final String approvalNumber = approvalNumVal;
         String txnId = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId
@@ -87,13 +90,13 @@ public class RespValAddService {
                     else transactionService.markFailure(txn, xml);
                 });
             }
-        } catch (Exception e) { System.err.println("Error updating ValAdd transaction: " + e.getMessage()); }
+        } catch (Exception e) { log.error("Error updating ValAdd transaction", e); }
         auditService.saveRaw(txnId, "NPCI_RESPVALADD_XML_OUT", xml);
         String txnIdForNpci = (pathTxnId != null && !pathTxnId.isBlank()) ? pathTxnId : origTxnId;
         if (txnIdForNpci != null && pendingSocketStore.completePending(txnIdForNpci, xml)) return;
         try {
             if (txnIdForNpci != null && !txnIdForNpci.isBlank()) npciRestClient.sendRespValAdd(xml, txnIdForNpci);
             else npciRestClient.sendRespValAdd(xml);
-        } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+        } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
     }
 }

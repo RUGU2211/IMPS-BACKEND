@@ -1,0 +1,268 @@
+# IMPS Backend – In-Detail Code Explanation & Data Flow
+
+This document explains the **Imps-backend** codebase: architecture, flows, how data is passed, and a **file-wise** breakdown.
+
+---
+
+## 1. High-Level Architecture
+
+IMPS Backend sits **between NPCI (National Payments Corporation of India) and the Bank Switch**. It:
+
+- **Talks to NPCI** in **XML** (REST or TCP socket).
+- **Talks to Switch** in **ISO 8583** (REST or TCP socket).
+- Converts XML ↔ ISO, validates, routes by institution (IFSC/orgId), and persists transactions and audit logs.
+
+```
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                    IMPS BACKEND                         │
+                    │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+  NPCI (XML)  ◄────► │  │ Controllers │  │  Services   │  │ Converters      │  │  ◄────►  Switch (ISO)
+  REST/Socket       │  │ /imps, /npci│  │ Req*/Resp*  │  │ XmlToIso        │  │         REST/Socket
+                    │  └──────┬──────┘  └──────┬──────┘  │ IsoToXml        │  │
+                    │         │                │         └────────┬────────┘  │
+                    │         ▼                ▼                    ▼          │
+                    │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+                    │  │ ImpsInbound │  │ Transaction │  │ Clients         │  │
+                    │  │ Service     │  │ Audit       │  │ NpciRestClient  │  │
+                    │  │ (entry)     │  │ DB          │  │ ISwitchClient    │  │
+                    │  └─────────────┘  └─────────────┘  └─────────────────┘  │
+                    └─────────────────────────────────────────────────────────┘
+```
+
+**Two main data flows:**
+
+1. **NPCI → IMPS → Switch → IMPS → NPCI** (Request flow)  
+   - NPCI sends ReqPay/ReqChkTxn/etc. (XML) → IMPS sends ACK → converts to ISO → sends to Switch → Switch responds (ISO) → IMPS converts to XML → sends to NPCI.
+
+2. **Switch → IMPS → NPCI → IMPS → Switch** (Reverse flow)  
+   - Switch sends Req (ISO) → IMPS converts to XML → sends to NPCI → NPCI responds (XML) → IMPS converts to ISO → returns to Switch.
+
+---
+
+## 2. How the Code Is Written – Conventions
+
+- **Single API surface under `/imps`**: All IMPS operations use paths like `/imps/reqpay/{txnId}`, `/imps/resppay/{txnId}`. Content-Type distinguishes:
+  - `application/xml` → NPCI XML (request or response).
+  - `application/octet-stream` → Switch ISO (request or response).
+- **Dual entry points**: Same logical flow can be triggered by **REST** (ImpsController/NpciController) or **Socket** (NpciSocketServer, SwitchSocketServer). Both funnel into the same services (e.g. `ImpsInboundService`, `ReqPayService`).
+- **txn_id and msg_id**: Resolved once at entry (path, or XML Head/Txn), validated for duplicates, then passed through. No random generation for these IDs.
+- **ACK first**: For Req* from NPCI, IMPS sends XML ACK immediately, then processes async (convert → Switch → persist → send response to NPCI).
+- **Routing by institution**: `Head @orgId` (request_org_id) → `institution_master` → switch_ip, switch_port (or REST base URL). Used for "which Switch" to call.
+
+---
+
+## 3. End-to-End Data Flow (Summary)
+
+### Flow A: NPCI Sends ReqPay (XML) via REST
+
+1. **ImpsController**  
+   `POST /imps/reqpay/{txnId}` with `Content-Type: application/xml` → body = XML string.
+2. **ImpsInboundService.handleReqPay(xml, txnId, restAckSender)**  
+   - Extracts `reqMsgId` (Head @msgId), resolves `txnId` (path → Txn @id → reqMsgId).  
+   - Validates `txnId` (non-blank, not duplicate).  
+   - Validates ReqPay (e.g. ReqPayValidationService).  
+   - Builds ACK XML and sends via `ackSender.send(ack)` (→ NpciRestClient.sendAck).  
+   - Calls `reqPayService.processAsync(xml, txnId, reqMsgId)` (async).
+3. **ReqPayService.processFromNpci(xml, txnId, reqMsgId)**  
+   - Audits XML in.  
+   - Validates IFSC (institution), checks bank down.  
+   - Creates `TransactionEntity` (transaction table).  
+   - **XmlToIsoConverter.convertReqPay(xml, txnId)** → ISOMsg (0200).  
+   - Sends ISO to Switch via **ISwitchClient.sendReqPay(iso, txnId, requestOrgId)** (RestSwitchClient or SocketSwitchClient).  
+   - On response: **IsoToXmlConverter.convertRespPayToXml** → XML, persist success/failure, send XML to NPCI (NpciRestClient.sendRespPay or socket sender).
+
+### Flow B: Switch Sends ReqPay (ISO) via REST – Reverse Flow
+
+1. **ImpsController**  
+   `POST /imps/reqpay/{txnId}` with `Content-Type: application/octet-stream` → body = ISO bytes.
+2. **ReqPayService.processFromSwitchSync(isoBytes, txnId)**  
+   - Validates txnId (no duplicate), audits ISO in.  
+   - Validates IFSC; if invalid → failure ISO (e.g. 0210 DE39=96).  
+   - **IsoToXmlConverter.convertReqPayToXml(isoBytes)** → XML.  
+   - Validates ReqPay XML.  
+   - Creates transaction, then **NpciRestClient.sendReqPay(reqXml, txnId)** (sync call to NPCI).  
+   - NPCI returns RespPay XML → **XmlToIsoConverter.convertRespPay(respXml)** → ISO bytes.  
+   - Persists result, audits, returns ISO to controller → response to Switch.
+3. Controller returns `ResponseEntity.ok(respIso)` (or ISO ACK if no response).
+
+### Flow C: Switch Sends RespPay (ISO) to IMPS – Callback
+
+1. **ImpsController**  
+   `POST /imps/resppay/{txnId}` with `application/octet-stream` → body = RespPay ISO.
+2. **RespPayService.processAsync(isoBytes, txnId)**  
+   - Converts ISO → XML (IsoToXmlConverter).  
+   - Finds transaction by txnId, updates status (success/failure).  
+   - If socket-originated request: **PendingSocketResponseStore.completePending(txnId, xml)** so the waiting NPCI socket thread gets the response.  
+   - Else sends XML to NPCI (NpciRestClient.sendRespPay).
+3. Controller builds ISO ACK (0810) from received ISO and returns it to Switch.
+
+---
+
+## 4. File-Wise Explanation
+
+### 4.1 Application Entry & Config
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ImpsBackendApplication.java** | Spring Boot entry; enables async, scheduling, JPA, `RoutingConfig`. | Starts app; `ApplicationRunner` prints banner with base URL and profile. |
+| **application.yml** | Server ports (HTTP 8081 / HTTPS 8443), DB, NPCI/Switch socket & REST URLs, SSL, socket server ports, heartbeat. | Read by config beans (`RoutingConfig`, `SocketConfig`, `SslConfig`, `NpciSocketConfig`, etc.). |
+
+---
+
+### 4.2 Controllers (HTTP Entry)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ImpsController.java** | Single REST API under `/imps`. | **XML (NPCI):** `consumes = APPLICATION_XML` → delegates to `ImpsInboundService.handleReqPay(xml, txnId, restAckSender())` etc.; returns ACK XML string. **ISO (Switch):** `consumes = APPLICATION_OCTET_STREAM` → delegates to `ReqPayService.processFromSwitchSync(isoBytes, txnId)` (and similar for ReqChkTxn, ReqHbt, ReqListAccPvd, ReqValAdd); for Resp* endpoints calls `RespPayService.processAsync(isoBytes, txnId)` then returns ISO ACK. `txnId` from path; body = XML string or byte[]. |
+| **NpciController.java** | REST under `/npci` (e.g. `/npci/reqpay/{txnId}`). | Same logic as IMPS XML flow: delegates to `ImpsInboundService.handleReqPay`, `handleRespPay`, etc. with `restAckSender()`. Used when caller uses "npci" path; data flow identical to `/imps` XML. |
+
+---
+
+### 4.3 Inbound Orchestration
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ImpsInboundService.java** | Central entry for **all** NPCI-originated XML (REST or socket). | For each Req*: extracts `reqMsgId` (XmlParsingService), resolves `txnId` (path → Txn @id → reqMsgId), validates new txnId, validates message (common or ReqPay), then **ackAndProcess**: build ACK → send via `AckSender` → run process (e.g. `reqPayService.processAsync(xml, txnId, reqMsgId)`). Returns ACK XML. For Resp*: resolve ids, build ACK with fallback, send ACK, then call corresponding Resp*Service.processAsync. So: **XML + txnId + reqMsgId** flow into the right Req* or Resp* service. |
+
+---
+
+### 4.4 Request/Response Services (Pay, ChkTxn, Hbt, ListAccPvd, ValAdd)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ReqPayService.java** | ReqPay: NPCI→Switch and Switch→NPCI. | **From NPCI:** XML + txnId + reqMsgId → audit, validate IFSC/bank down, create transaction, **XmlToIsoConverter.convertReqPay** → ISO → **ISwitchClient.sendReqPay** → on response **IsoToXmlConverter.convertRespPayToXml** → update txn, send XML to NPCI (REST or **PendingSocketResponseStore**). **From Switch:** ISO bytes + txnId → validate, **IsoToXmlConverter.convertReqPayToXml** → **NpciRestClient.sendReqPay(reqXml, txnId)** (sync) → **XmlToIsoConverter.convertRespPay** → return ISO to Switch. |
+| **RespPayService.java** | RespPay: NPCI→Switch and Switch→NPCI. | **From NPCI:** XML → **XmlToIsoConverter.convertRespPay** → **ISwitchClient.sendRespPay(iso, txnId)**. **From Switch:** ISO → convert to XML, update transaction by txnId, **completePending(txnId, xml)** or **NpciRestClient.sendRespPay(xml, txnId)**. |
+| **ReqChkTxnService.java** | Same pattern as ReqPay for ReqChkTxn (XML↔ISO, Switch client, transaction, audit). | txnId/msgId from inbound; DE3=380000; org ref in DE48, txnId in DE120. |
+| **RespChkTxnService.java** | Handles RespChkTxn from NPCI (forward to Switch) and from Switch (convert to XML, update txn, send to NPCI). | Same data-passing pattern as RespPay. |
+| **ReqHbtService.java** | Heartbeat: ReqHbt XML→ISO 0800, send to Switch; response 0810→XML. | Often no persistence of full txn; MTI 0800/0810, DE24=831. |
+| **ReqListAccPvdService / RespListAccPvdService** | List account provider request/response. | Same orchestration: XML↔ISO, Switch client, optional transaction/audit. |
+| **ReqValAddService / RespValAddService** | Name enquiry (account validation). | DE3=310000; XML↔ISO; institution validation; transaction lookup by DE120 or req_xml for ValAdd. |
+
+Data is always passed as: **xml (String)** or **isoBytes (byte[])** plus **txnId (String)** and sometimes **reqMsgId (String)**. Services use converters and clients; they do not parse raw XML/ISO themselves beyond what converters need.
+
+---
+
+### 4.5 ACK and Failure Responses
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **AckService.java** | Builds all ACKs and failure responses. | **buildAck(api, reqMsgId)** → NPCI-style XML ACK (ns2:Ack, api, reqMsgId, ts). **buildAckWithFallback(api, reqMsgId, txnId)** when reqMsgId may be blank. **buildIsoAckFromResponse(receivedIso)** → 0810 ISO for Switch. **buildFailureRespPay/buildFailureRespChkTxn/buildFailureRespValAdd** → failure XML. **buildFailureRespIso(reqIsoBytes, errMsg)** → 0210 DE39=96 for Switch. Inputs: (api, reqMsgId) or (iso bytes); output: String XML or byte[] ISO. |
+| **AckSender.java** | Interface: `send(String ack)`. | Implemented by REST (NpciRestClient.sendAck) or socket (write ACK bytes to socket). So "who receives the ACK" is injected at controller/socket level. |
+
+---
+
+### 4.6 Converters (Format Translation)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **XmlToIsoConverter.java** | NPCI XML → ISO 8583. | **convertReqPay(xml, txnIdForDe120)** uses XmlUtil.parseReqPay → ISOMsg 0200 (DE3=400000, amount, IFSC, accounts, DE120=txnId). Similar for ReqChkTxn (0200), ReqHbt (0800), ReqValAdd (0200), ReqListAccPvd (0200), and **convertRespPay(xml)** → 0210, etc. Input: String xml (and optional txnId); output: ISOMsg. |
+| **IsoToXmlConverter.java** | ISO 8583 → NPCI XML. | **convertReqPayToXml(isoBytes)** / **convertRespPayToXml(isoBytes)** etc. Unpack ISO with ImpsIsoPackager, map fields to NPCI XML tags (Head, Txn, Payer, Payee, Resp, Ref, etc.). Used when **Switch sends Req** (ISO→XML to NPCI) or when **IMPS receives Resp from Switch** (ISO→XML to send to NPCI). Input: byte[] or ISOMsg; output: String XML. |
+
+---
+
+### 4.7 Clients (Outbound)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ISwitchClient.java** | Interface for sending ISO to Switch (Req* and Resp*). | Methods like `sendReqPay(ISOMsg, txnId)`, `sendReqPay(iso, txnId, requestOrgId)`, `sendRespPay(iso, txnId)`. Returns byte[] (response ISO) or null. |
+| **RestSwitchClient.java** | REST implementation of ISwitchClient. | **SwitchAddressResolver.resolve(requestOrgId)** → base URL → POST `/imps/reqpay/{txnId}` (or resp pay, etc.) with body = ISO bytes, Content-Type application/octet-stream. Response = byte[]. |
+| **SocketSwitchClient.java** | Socket implementation: [4-byte length][ISO]. | Connects to Switch host:port (from resolver), writes length+ISO, reads length+response ISO. |
+| **NpciRestClient.java** | Sends XML to NPCI over HTTP. | **sendAck(ackXml)** → POST to routing.npci.ack. **sendReqPay(xml, txnId)** → POST to baseUrl/imps/reqpay/{txnId}. **sendRespPay(xml, txnId)** → POST to baseUrl/npci/resppay/{txnId}. So: XML and txnId determine URL and body. |
+
+---
+
+### 4.8 Routing and Resolution
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **SwitchAddressResolver.java** | Resolves "where to send Switch traffic" by request_org_id. | **resolve(requestOrgId)** → lookup **InstitutionMasterRepository** by request_org_id (active); get switch_ip, switch_port; else fallback from application.yml. Returns **SwitchAddress** (host, port, restBaseUrl). **isBankDown(requestOrgId)** checks active=false. **findDownInstitution**, **buildBankDownErrMsg**, **logFailedSwitchToConsole** for error handling. So: **orgId (from XML Head)** → DB or config → host/port/URL. |
+| **RoutingConfig.java** | Loads routing.npci.* and routing.switch.* from YAML. | Supplies base URLs and endpoint keys to NpciRestClient and switch REST URL building. |
+
+---
+
+### 4.9 Socket Layer
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **NpciSocketServer.java** | Listens for NPCI TCP (or TLS); protocol [4-byte length][XML]. | Accept connection → read length → read XML → **XmlParsingService.extractMsgId/extractTxnId** → **detectMessageType(xml)** (ReqPay, RespPay, …). Req*: validate txnId, validate message; send ACK on socket; if compliant-flow and npciResponseSender: dispatch and continue; else **PendingSocketResponseStore.registerPending(txnId)** → **SocketRequestDispatcher.dispatch** → wait on future.get(timeout); then write response XML (length+body). Resp*: dispatch then response = ACK. So: **raw bytes → XML string → txnId, msgType, reqMsgId → ImpsInboundService / dispatcher**; response back as [4 bytes][XML]. |
+| **SwitchSocketServer.java** | Listens for Switch TCP/TLS; protocol [4-byte length][ISO]. | Accept → read length → read ISO → **detectMessageType(isoBytes)** (MTI + DE3), **extractTxnId(isoBytes)** → call **ReqPayService.processFromSwitchSync**, ReqChkTxnService, ReqHbtService, etc. → get respIso (or ISO ACK) → write [4 bytes][respIso]. So: **ISO bytes + txnId** → same Req* services as REST; response = ISO bytes. |
+| **SocketRequestDispatcher.java** | Routes socket-originated XML to correct service. | **dispatch(xml, txnId, msgType, reqMsgId)** → switch on msgType (ReqPay, RespPay, …) → call **reqPayService.processFromNpci(xml, txnId, reqMsgId)** etc. No conversion; just delegation. |
+| **PendingSocketResponseStore.java** | Maps txnId → CompletableFuture<String> (response XML). | **registerPending(txnId)** → put future, return it (socket thread blocks on future.get). **completePending(txnId, responseXml)** → complete future (called when Switch callback or local handling produces XML). So: **async response from Switch flow is passed back to the correct NPCI socket thread** via this store. |
+
+---
+
+### 4.10 Persistence and Audit
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **TransactionService.java** | CRUD and state for `transaction` table. | **validateNewTxnId(txnId)** → throw if exists. **createRequest(txnId, reqXml)** → new TransactionEntity (INIT), save. **markIsoSent**, **markSuccess(txn, respXml, approvalNum, …)**, **markFailure(txn, respXml)**. **findByTxnId**, **findOptionalByTxnId**, **findOptionalValAddIsoSentByTxnIdInReqXml** for lookups. So: **txnId + request/response XML + status** drive DB updates. |
+| **TransactionEntity.java** | JPA entity for table `transaction`. | Fields: txnId, txnType, req_in/out, resp_in/out, req_xml, resp_xml, switch_status, de11, de37, de12, de13, approval_number. |
+| **MessageAuditService.java** | Writes to `message_audit_log`. | **saveRaw(txnId, stage, message)** for XML/string. **saveRawBytes** (Base64). **saveRawBytesWithParsed(txnId, stage, isoBytes)** for ISO with parsed form in parsed_message. **saveParsed(txnId, stage, ISOMsg)**. Stages like NPCI_REQPAY_XML_IN, SWITCH_REQPAY_ISO_OUT, etc. So: **txnId + stage + payload** → one audit row. |
+
+---
+
+### 4.11 Parsing and Validation
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **XmlParsingService.java** | Extract fields from NPCI XML. | Uses **XmlUtil.read(xml, xpath)** and DB-driven **XmlPathReqPay** for ReqPay. **extractMsgId**, **extractTxnId**, **extractOrgId** (Head/Txn); **parseNpcIReqPay**, **parseReqChkTxn**, **parseReqValAdd**, **parseReqHbt**, **parseReqListAccPvd**. So: **xml String** → **msgId, txnId, orgId, or Map of tags**. |
+| **ReqPayValidationService.java** | ReqPay-specific rules (amount, accounts, etc.). | **validate(xml)** → throws ReqPayValidationException if invalid. |
+| **CommonCodeValidationService.java** | Common Head/Txn validation for non-Pay messages. | **validateCommonHeadTxn(xml)** → throws CommonCodeValidationException. |
+
+---
+
+### 4.12 ISO 8583 and Utilities
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ImpsIsoPackager.java** | jPOS packager: field definitions for ISO 8583 (MTI, bitmap, DE2–DE120, etc.). | Used by **IsoUtil.unpack(pack)** and when building/packing ISOMsg. Defines lengths and types (IFB_NUMERIC, IFA_LLCHAR, etc.). |
+| **IsoUtil.java** | Pack/unpack ISO bytes with given packager. | **unpack(byte[], packager)** → ISOMsg; **pack(ISOMsg)** → byte[]. |
+| **Iso8583PrettyFormatter.java** | Format ISOMsg for console/log. | Used in ImpsController.formatIsoForConsole(isoBytes). |
+
+---
+
+### 4.13 Config and Entity (Other)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **ImpsServerDisplayInfo.java** | Reads imps.server.host/protocol and server.port for banner and logs. | Display only. |
+| **SslConfig.java** | Loads keystore/truststore for socket TLS. | Used by NpciSocketServer, SwitchSocketServer, and outbound socket client. |
+| **SocketConfig.java** | socket.enabled, server.bind-host, npci/switch port/ssl-port, max-xml-size, response-timeout. | Injected into socket servers. |
+| **NpciSocketConfig.java** | npci.compliant-flow, socket host/port/ssl/trust-store, timeouts. | Used by NpciSocketServer and outbound NPCI socket client. |
+| **InstitutionMaster.java** | JPA entity: request_org_id, switch_ip, switch_port, active, name, bank_code, spoc, etc. | Read by SwitchAddressResolver. |
+| **InstitutionMasterRepository.java** | findFirstByRequestOrgIdAndActiveTrueOrderByIdAsc, findFirstByRequestOrgIdOrderByIdAsc. | Used by SwitchAddressResolver. |
+
+---
+
+### 4.14 Exception Handling
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **GlobalExceptionHandler.java** | @ControllerAdvice: maps DuplicateTxnIdException, ReqPayValidationException, CommonCodeValidationException, etc. to HTTP status and body. | Ensures validation failures return proper status and message to caller. |
+
+---
+
+### 4.15 NPCI Response Sender (Socket)
+
+| File | Purpose | Data Flow |
+|------|---------|-----------|
+| **INpciResponseSender.java** | Interface: **send(txnId, responseXml)** → boolean. | When true, IMPS uses this to send response to NPCI (e.g. outbound socket) instead of only REST. |
+| **PendingSocketResponseSender.java** (or NpciSocketClientSender) | Implements INpciResponseSender: for socket-originated requests, completes **PendingSocketResponseStore** so the waiting socket thread gets the XML. | So: **txnId + responseXml** from RespPayService (Switch callback) → **completePending(txnId, responseXml)** → socket thread unblocks and sends XML to NPCI. |
+
+---
+
+## 5. How Data Is Passed – Summary
+
+- **Entry:** Controllers or socket servers receive **body (XML string or ISO byte[])** and **path variable txnId**.
+- **Orchestration:** ImpsInboundService (for NPCI XML) resolves **reqMsgId** and **txnId**, validates once, sends ACK, then calls the right **Req* or Resp* service** with (xml, txnId, reqMsgId).
+- **Services:** Receive (xml | isoBytes), txnId, and optionally reqMsgId. They call:
+  - **XmlParsingService** for msgId, txnId, orgId.
+  - **XmlToIsoConverter** / **IsoToXmlConverter** for format change.
+  - **TransactionService** for create/update by txnId.
+  - **MessageAuditService** for audit by txnId + stage.
+  - **ISwitchClient** with (ISO, txnId, requestOrgId) or **NpciRestClient** with (XML, txnId).
+  - **PendingSocketResponseStore** when the request came from socket and response must go back on that channel.
+- **Routing:** **requestOrgId** (from XML Head) → **SwitchAddressResolver** → **InstitutionMaster** or config → **host/port or REST URL** for Switch.
+- **Response path:** Switch response (ISO) → converter → XML → **completePending(txnId, xml)** or **NpciRestClient.sendRespPay(xml, txnId)**. So **txnId** is the key that ties request and response across NPCI, IMPS, and Switch.
+
+This file-wise breakdown and flow description should give you a complete picture of how the IMPS backend code is structured and how data moves through it.

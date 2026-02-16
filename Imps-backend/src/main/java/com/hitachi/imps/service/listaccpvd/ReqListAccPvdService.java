@@ -1,5 +1,8 @@
 package com.hitachi.imps.service.listaccpvd;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -30,6 +33,8 @@ import com.hitachi.imps.spec.AccPvdSpec;
 @Service
 public class ReqListAccPvdService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReqListAccPvdService.class);
+
     @Value("${imps.org-id:BANK01}")
     private String orgId;
 
@@ -48,12 +53,12 @@ public class ReqListAccPvdService {
 
     @Async
     public void processAsync(String xml, String pathTxnId) {
-        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { System.err.println("ReqListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, null); } catch (Exception e) { log.error("ReqListAccPvdService (NPCI) error", e); }
     }
 
     @Async
     public void processAsync(String xml, String pathTxnId, String reqMsgId) {
-        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { System.err.println("ReqListAccPvdService (NPCI) ERROR: " + e.getMessage()); }
+        try { processFromNpci(xml, pathTxnId, reqMsgId); } catch (Exception e) { log.error("ReqListAccPvdService (NPCI) error", e); }
     }
 
     @Transactional
@@ -73,7 +78,7 @@ public class ReqListAccPvdService {
         auditService.saveRaw(txnId, "NPCI_RESPLISTACCPVD_XML_OUT", respXml);
         transactionService.markSuccess(txn, respXml, null, null);  // SUCCESS when resp sent to NPCI
         if (sendToNpci(txnId, respXml)) return;
-        try { npciRestClient.sendRespListAccPvd(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+        try { npciRestClient.sendRespListAccPvd(respXml, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
     }
 
     private boolean sendToNpci(String txnId, String respXml) {
@@ -83,7 +88,7 @@ public class ReqListAccPvdService {
 
     @Async
     public void processAsync(byte[] isoBytes, String pathTxnId) {
-        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { System.err.println("ReqListAccPvdService (Switch) ERROR: " + e.getMessage()); }
+        try { processFromSwitch(isoBytes, pathTxnId); } catch (Exception e) { log.error("ReqListAccPvdService (Switch) error", e); }
     }
 
     public void processFromSwitch(byte[] isoBytes, String pathTxnId) {
@@ -108,7 +113,7 @@ public class ReqListAccPvdService {
             transactionService.markSuccess(txn, respXml, null, null);
             return respBytes;
         } catch (Exception e) {
-            System.err.println("IMPS: RespListAccPvd XML to ISO failed: " + e.getMessage());
+            log.error("IMPS: RespListAccPvd XML to ISO failed", e);
             transactionService.markFailure(txn, null);
             return null;
         }

@@ -1,5 +1,7 @@
 package com.hitachi.imps.client.npci;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -17,6 +19,8 @@ import com.hitachi.imps.config.RoutingConfig;
 @Component
 public class NpciRestClient {
 
+    private static final Logger log = LoggerFactory.getLogger(NpciRestClient.class);
+
     @Autowired
     private RoutingConfig routingConfig;
     @Autowired
@@ -30,7 +34,7 @@ public class NpciRestClient {
             String response = restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
             return response;
         } catch (Exception e) {
-            System.err.println("NPCI REST SEND FAILED [" + endpointKey + "]: " + e.getMessage());
+            log.warn("NPCI REST SEND FAILED [{}]: {}", endpointKey, e.getMessage());
             return null;
         }
     }
@@ -43,7 +47,7 @@ public class NpciRestClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             restTemplate.postForObject(url, new HttpEntity<>(ackXml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI REST: Send ACK failed: " + e.getMessage());
+            log.warn("NPCI REST: Send ACK failed: {}", e.getMessage());
         }
     }
 
@@ -60,7 +64,7 @@ public class NpciRestClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI REST SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            log.warn("NPCI REST SEND FAILED [{}/{}]: {}", apiType, txnId, e.getMessage());
             return null;
         }
     }
@@ -73,7 +77,7 @@ public class NpciRestClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI REST SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            log.warn("NPCI REST SEND FAILED [{}/{}]: {}", apiType, txnId, e.getMessage());
             return null;
         }
     }
@@ -96,7 +100,7 @@ public class NpciRestClient {
             headers.setContentType(MediaType.APPLICATION_XML);
             return restTemplate.postForObject(url, new HttpEntity<>(xml, headers), String.class);
         } catch (Exception e) {
-            System.err.println("NPCI REST SEND FAILED [reqhbt]: " + e.getMessage());
+            log.warn("NPCI REST SEND FAILED [reqhbt]: {}", e.getMessage());
             return null;
         }
     }

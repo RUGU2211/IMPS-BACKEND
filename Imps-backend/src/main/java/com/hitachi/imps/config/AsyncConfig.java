@@ -2,6 +2,8 @@ package com.hitachi.imps.config;
 
 import java.util.concurrent.Executor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -40,13 +42,10 @@ public class AsyncConfig {
         executor.setAwaitTerminationSeconds(60);
         
         executor.initialize();
-        
-        System.out.println("=== Async Executor Initialized ===");
-        System.out.println("Core Pool: " + executor.getCorePoolSize());
-        System.out.println("Max Pool: " + executor.getMaxPoolSize());
-        System.out.println("Queue Capacity: " + executor.getQueueCapacity());
-        System.out.println("==================================");
-        
+
+        Logger log = LoggerFactory.getLogger(AsyncConfig.class);
+        log.info("Async Executor Initialized: core={}, max={}, queue={}", executor.getCorePoolSize(), executor.getMaxPoolSize(), executor.getQueueCapacity());
+
         return executor;
     }
 }

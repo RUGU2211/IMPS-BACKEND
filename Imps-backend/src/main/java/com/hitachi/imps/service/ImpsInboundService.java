@@ -1,5 +1,8 @@
 package com.hitachi.imps.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.hitachi.imps.exception.CommonCodeValidationException;
 import com.hitachi.imps.exception.InvalidReqMsgIdException;
 import com.hitachi.imps.exception.ReqPayValidationException;
@@ -24,6 +27,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ImpsInboundService {
+
+    private static final Logger log = LoggerFactory.getLogger(ImpsInboundService.class);
 
     @Autowired private AckService ackService;
     @Autowired private XmlParsingService xmlParsingService;
@@ -59,7 +64,7 @@ public class ImpsInboundService {
     private void ackAndProcess(String xml, String txnId, String reqMsgId, String apiName, String reqType, AckSender ackSender, Runnable process) {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
-        System.out.println("[IMPS] ACK sent to NPCI " + reqType + "/" + txnId);
+        log.info("[IMPS] ACK sent to NPCI {}/{}", reqType, txnId);
         String ack = ackService.buildAck(apiName, reqMsgId);
         ackSender.send(ack);
         process.run();
@@ -71,7 +76,7 @@ public class ImpsInboundService {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
         String txnId = resolveTxnId(pathTxnId, xml, reqMsgId);
-        System.out.println("[IMPS] ReqPay received txnId=" + txnId + " | transaction + message_audit_log will be updated");
+        log.info("[IMPS] ReqPay received txnId={}", txnId);
         validateNewTxnId(txnId);
         reqPayValidationService.validate(xml);
         ackAndProcess(xml, txnId, reqMsgId, "ReqPay", "reqpay", ackSender, () -> reqPayService.processAsync(xml, txnId, reqMsgId));
@@ -83,7 +88,7 @@ public class ImpsInboundService {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
         String txnId = resolveTxnId(pathTxnId, xml, reqMsgId);
-        System.out.println("[IMPS] ReqChkTxn received txnId=" + txnId + " | transaction + message_audit_log will be updated");
+        log.info("[IMPS] ReqChkTxn received txnId={}", txnId);
         validateNewTxnId(txnId);
         commonCodeValidationService.validateCommonHeadTxn(xml);
         ackAndProcess(xml, txnId, reqMsgId, "ReqChkTxn", "reqchktxn", ackSender, () -> reqChkTxnService.processAsync(xml, txnId, reqMsgId));
@@ -95,7 +100,7 @@ public class ImpsInboundService {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
         String txnId = resolveTxnId(pathTxnId, xml, reqMsgId);
-        System.out.println("[IMPS] ReqHbt received txnId=" + txnId + " | transaction + message_audit_log will be updated");
+        log.info("[IMPS] ReqHbt received txnId={}", txnId);
         validateNewTxnId(txnId);
         commonCodeValidationService.validateCommonHeadTxn(xml);
         ackAndProcess(xml, txnId, reqMsgId, "ReqHbt", "reqhbt", ackSender, () -> reqHbtService.processAsync(xml, txnId, reqMsgId));
@@ -107,7 +112,7 @@ public class ImpsInboundService {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
         String txnId = resolveTxnId(pathTxnId, xml, reqMsgId);
-        System.out.println("[IMPS] ReqListAccPvd received txnId=" + txnId + " | transaction + message_audit_log will be updated");
+        log.info("[IMPS] ReqListAccPvd received txnId={}", txnId);
         validateNewTxnId(txnId);
         commonCodeValidationService.validateCommonHeadTxn(xml);
         ackAndProcess(xml, txnId, reqMsgId, "ReqListAccPvd", "reqlistaccpvd", ackSender, () -> reqListAccPvdService.processAsync(xml, txnId, reqMsgId));
@@ -119,7 +124,7 @@ public class ImpsInboundService {
         if (reqMsgId == null || reqMsgId.isBlank())
             throw new InvalidReqMsgIdException("reqMsgId (Head @msgId) is required for ACK and must not be blank");
         String txnId = resolveTxnId(pathTxnId, xml, reqMsgId);
-        System.out.println("[IMPS] ReqValAdd received txnId=" + txnId + " | transaction + message_audit_log will be updated");
+        log.info("[IMPS] ReqValAdd received txnId={}", txnId);
         validateNewTxnId(txnId);
         commonCodeValidationService.validateCommonHeadTxn(xml);
         ackAndProcess(xml, txnId, reqMsgId, "ReqValAdd", "reqvaladd", ackSender, () -> reqValAddService.processAsync(xml, txnId, reqMsgId));

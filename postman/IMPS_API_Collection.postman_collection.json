@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "imps-api-collection-2026",
     "name": "IMPS API Collection (Dynamic)",
-    "description": "IMPS API Collection. Dynamic URL format: https://{{host}}:{{port}}/imps/{{reqtype|resptype}}/{{txnId}}. Set host, impsPort, switchPort, npciPort in collection variables; prerequest builds base URLs. API path: /imps/reqpay|reqchktxn|reqhbt|reqlistaccpvd|reqvaladd/{{txnId}}. Connection flow (Switch→IMPS): Conn1 Switch→IMPS REQ, IMPS→Switch RESP; Conn2 IMPS→NPCI REQ, NPCI→IMPS ACK, NPCI→IMPS RESP, IMPS→NPCI ACK; Conn3 = Conn1 response. Use Switch flow (port switchPort) for full flow and account_master update.",
+    "description": "IMPS API Collection. Ports: IMPS 8443, Switch 8444, NPCI 8445 (from .env). Default profile prod,ssl. Dynamic URL: https://{{host}}:{{port}}/imps/{{reqtype|resptype}}/{{txnId}}. Set host, impsPort, switchPort, npciPort in variables. API path: /imps/reqpay|reqchktxn|reqhbt|reqlistaccpvd|reqvaladd/{{txnId}}. See samples/README.txt for ISO/XML samples.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

@@ -2,6 +2,8 @@ package com.hitachi.imps.service.routing;
 
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -21,6 +23,8 @@ import com.hitachi.imps.util.IsoUtil;
  */
 @Service
 public class RoutingService {
+
+    private static final Logger log = LoggerFactory.getLogger(RoutingService.class);
 
     @Autowired
     private RoutingConfig routingConfig;
@@ -44,7 +48,7 @@ public class RoutingService {
         try {
             return rest.postForObject(url, request, byte[].class);
         } catch (Exception e) {
-            System.err.println("Switch send failed [" + endpointKey + "]: " + e.getMessage());
+            log.warn("Switch send failed [{}]: {}", endpointKey, e.getMessage());
             return null;
         }
     }
@@ -63,7 +67,7 @@ public class RoutingService {
         try {
             return rest.postForObject(url, request, byte[].class);
         } catch (Exception e) {
-            System.err.println("Switch send failed [" + endpointKey + "]: " + e.getMessage());
+            log.warn("Switch send failed [{}]: {}", endpointKey, e.getMessage());
             return null;
         }
     }
@@ -82,7 +86,7 @@ public class RoutingService {
         try {
             return rest.postForObject(url, request, String.class);
         } catch (Exception e) {
-            System.err.println("NPCI send failed [" + endpointKey + "]: " + e.getMessage());
+            log.warn("NPCI send failed [{}]: {}", endpointKey, e.getMessage());
             return null;
         }
     }

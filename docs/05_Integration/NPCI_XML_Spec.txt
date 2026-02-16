@@ -1,0 +1,26 @@
+# NPCI XML Specification
+
+See **[03_API_Documentation/NPCI_IMPS_Message_Formats.txt](../03_API_Documentation/NPCI_IMPS_Message_Formats.txt)** for full authoritative XML structures.
+
+## Message Types
+
+| Type | Description |
+|------|-------------|
+| ReqPay | P2A / P2P / CREDIT / FIR fund transfer |
+| ReqChkTxn | Check transaction status |
+| ReqHbt | Heartbeat (ALIVE, EOD) |
+| ReqListAccPvd | List account providers |
+| ReqValAdd | Name enquiry, address validation |
+
+## Common Headers
+
+- `Head @ver`, `@ts`, `@orgId`, `@msgId`, `@prodType`
+- `Txn @id` – 35 chars (3 BPC + 32)
+- `msgId` = `txnId` for Rules 021/022
+
+## XML to ISO Mapping
+
+- ReqPay → ISO 0200 (DE3=400000)
+- ReqChkTxn → ISO 0200 (DE3=380000)
+- ReqHbt → ISO 0800
+- ReqValAdd → ISO 0200 (DE3=310000)

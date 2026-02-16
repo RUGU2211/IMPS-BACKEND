@@ -1,68 +1,34 @@
 # ===========================================
-# MOCK SWITCH – Application Configuration
+# MOCK SWITCH – Application configuration
 # ===========================================
-#
-# CONNECTION PORTS (simple reference)
-# -----------------------------------
-#   IMPS:    HTTP 8081   HTTPS 8443   Socket TCP 9083   Socket TLS 9443
-#   Switch:  HTTP 8082   HTTPS 8444   TCP 9084          TLS 9444
-#   NPCI:    HTTP 8083   HTTPS 8445   TCP 9085          TLS 9445
-# Default: socket uses TLS (ssl-enabled: true). Run from Parent/mock_switch/
-#
-# CONNECTION FLOW EXPLANATION:
-# ===========================================
-# FLOW 1: IMPS → Switch → IMPS (Request-Response Flow)
-# -----------------------------------------------------
-# Connection 1: IMPS opens connection to Switch (socket) → sends Req → Switch sends Resp → IMPS closes connection
-# Connection 2: Switch opens connection to IMPS (socket) → sends Resp → IMPS sends ACK → Switch closes connection
-#
-# FLOW 2: Switch → IMPS → Switch (Reverse Flow)
-# -----------------------------------------------------
-# Connection 1: Switch opens connection to IMPS (socket) → sends Req → IMPS sends Resp → Switch closes connection
-# Connection 2: IMPS opens connection to Switch (socket) → sends Resp → Switch sends ACK → IMPS closes connection
-#
-# IMPORTANT: Each connection is opened, used, and closed immediately after use.
-# Connections are NOT reused - new connection is opened for each message exchange.
+# All values from .env. Profiles: dev, prod, ssl. Default: prod,ssl
+# SPRING_PROFILES_ACTIVE=prod,ssl (default) or dev,ssl (from .env)
 # ===========================================
 
-# ===========================================
-# SERVER CONFIGURATION
-# ===========================================
 server:
-  port: 8082
+  port: ${SERVER_PORT:8082}
 
-# ===========================================
-# DATABASE CONFIGURATION
-# ===========================================
 spring:
   application:
     name: mock-switch
-  # Default profile: ssl (HTTPS). Use -Dspring.profiles.active= (empty) or "default" for HTTP only.
   profiles:
-    active: ssl
+    active: ${SPRING_PROFILES_ACTIVE:prod,ssl}
   datasource:
-    url: jdbc:postgresql://localhost:5432/switch_db
-    username: postgres
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/switch_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
     hikari:
-      housekeeping-run-interval: 10000  # 10s (avoids thread starvation when machine sleeps)
+      housekeeping-run-interval: 10000
 
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL:validate}
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
     open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-
-# ===========================================
-# LOGGING CONFIGURATION
-# ===========================================
-logging:
-  level:
-    org.hibernate.SQL: DEBUG  # Log SQL queries for account_master operations
 
 # ===========================================
 # IMPS BACKEND ROUTING CONFIGURATION
@@ -74,11 +40,11 @@ logging:
 # Endpoint path is built dynamically: base-path / resptype / txnId
 # ===========================================
 imps:
-  enabled: true               # false = run standalone (no outbound calls to IMPS)
-  imps_ip: 192.168.1.38
-  imps_port: 8081
-  imps_ssl_port: 8443         # IMPS HTTPS when ssl profile; used by proxy
-  imps_use_ssl: false         # true in ssl profile when IMPS runs with ssl
+  enabled: ${IMPS_ENABLED:true}   # false = run standalone (no outbound calls to IMPS)
+  imps_ip: ${IMPS_IP:192.168.1.38}
+  imps_port: ${IMPS_PORT:8081}
+  imps_ssl_port: ${IMPS_SSL_PORT:8443}  # IMPS HTTPS when ssl profile; used by proxy
+  imps_use_ssl: false           # true in ssl profile when IMPS runs with ssl
   base-path: /imps
 
 # ===========================================
@@ -96,8 +62,8 @@ socket:
     port: 9084             # TCP port (used when ssl-enabled: false)
     ssl-port: 9444         # SSL/TLS port (used when ssl-enabled: true)
   ssl:
-    key-store: file:${user.dir}/../certs/switch-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SSL_KEY_STORE:file:${user.dir}/../certs/switch-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
 
 # ===========================================
 # MOCK BEHAVIOUR CONFIGURATION
@@ -110,9 +76,7 @@ mock:
 # ===========================================
 # PROFILE: ssl – REST over HTTPS (port 8444)
 # ===========================================
-# ssl is default in application.yml; use -Dspring.profiles.active=default for HTTP
-# HTTPS REST on port 8444. IMPS POST to https://host:8444/imps/{resptype}/{txnId}
-# ===========================================
+# Combine: dev,ssl or prod,ssl
 ---
 spring:
   config:
@@ -121,11 +85,11 @@ spring:
 imps:
   imps_use_ssl: true          # Proxy to IMPS over HTTPS (8443)
 server:
-  port: 8444
+  port: ${SERVER_PORT:8444}
   ssl:
     enabled: true
-    key-store: file:${user.dir}/../certs/switch-keystore.jks
-    key-store-password: IMPS-Backend
+    key-store: ${SSL_KEY_STORE:file:${user.dir}/../certs/switch-keystore.jks}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:IMPS-Backend}
     key-store-type: PKCS12
     key-alias: switch
 

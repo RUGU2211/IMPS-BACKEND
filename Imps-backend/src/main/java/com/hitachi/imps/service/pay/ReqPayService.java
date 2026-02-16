@@ -1,6 +1,8 @@
 package com.hitachi.imps.service.pay;
 
 import org.jpos.iso.ISOMsg;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ import com.hitachi.imps.config.ImpsServerDisplayInfo;
 @Service
 public class ReqPayService {
 
+    private static final Logger log = LoggerFactory.getLogger(ReqPayService.class);
     private static final String UNKNOWN_TXN = "UNKNOWN";
 
     @Autowired private XmlToIsoConverter xmlToIsoConverter;
@@ -55,8 +58,7 @@ public class ReqPayService {
         try {
             processFromNpci(xml, pathTxnId, null);
         } catch (Exception e) {
-            System.err.println("ReqPayService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("ReqPayService (NPCI) ERROR", e);
         }
     }
 
@@ -65,8 +67,7 @@ public class ReqPayService {
         try {
             processFromNpci(xml, pathTxnId, reqMsgId);
         } catch (Exception e) {
-            System.err.println("ReqPayService (NPCI) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("ReqPayService (NPCI) ERROR", e);
         }
     }
 
@@ -90,7 +91,7 @@ public class ReqPayService {
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -105,7 +106,7 @@ public class ReqPayService {
             transactionService.markFailure(txn, errResp);
             auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_OUT", errResp);
             if (sendToNpci(txnId, errResp)) return;
-            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(errResp, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
             return;
         }
 
@@ -118,7 +119,7 @@ public class ReqPayService {
             if (iso.hasField(12)) txn.setDe12(iso.getString(12));
             if (iso.hasField(13)) txn.setDe13(iso.getString(13));
         } catch (Exception e) {
-            System.err.println("Error setting DE fields: " + e.getMessage());
+            log.warn("Error setting DE fields: {}", e.getMessage());
         }
         auditService.saveParsed(txnId, "SWITCH_REQPAY_ISO_OUT", iso);
 
@@ -131,7 +132,7 @@ public class ReqPayService {
             String approvalNum = extractApprovalNum(response);
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             if (sendToNpci(txnId, respXml)) return;
-            try { npciRestClient.sendRespPay(respXml, txnId); } catch (Exception e) { System.out.println("NPCI not available: " + e.getMessage()); }
+            try { npciRestClient.sendRespPay(respXml, txnId); } catch (Exception e) { log.warn("NPCI not available: {}", e.getMessage()); }
         } else {
             transactionService.markFailure(txn, null);
             String errAck = ackService.buildAckWithFallback("RespPay", msgId, txnId);
@@ -157,8 +158,7 @@ public class ReqPayService {
         try {
             processFromSwitch(isoBytes, pathTxnId);
         } catch (Exception e) {
-            System.err.println("ReqPayService (Switch) ERROR: " + e.getMessage());
-            e.printStackTrace();
+            log.error("ReqPayService (Switch) ERROR", e);
         }
     }
 
@@ -184,7 +184,7 @@ public class ReqPayService {
             String payeeIfsc = iso.hasField(33) ? iso.getString(33) : null;
             String instErr = institutionValidationService.validatePayeeIfsc(payeeIfsc);
             if (instErr != null) {
-                System.out.println("[IMPS] ReqPay from Switch – institution invalid: " + instErr);
+                log.warn("[IMPS] ReqPay from Switch – institution invalid: {}", instErr);
                 String reqXmlFail = isoToXmlConverter.convertReqPayToXml(isoBytes);
                 com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXmlFail);
                 String errResp = ackService.buildFailureRespPay(null, "MJ", instErr);
@@ -192,7 +192,7 @@ public class ReqPayService {
                 return ackService.buildFailureRespIso(isoBytes, instErr);
             }
         } catch (Exception e) {
-            System.err.println("IMPS: ReqPay from Switch – could not validate IFSC: " + e.getMessage());
+            log.warn("IMPS: ReqPay from Switch – could not validate IFSC: {}", e.getMessage());
             return null;
         }
 
@@ -202,7 +202,7 @@ public class ReqPayService {
         try {
             reqPayValidationService.validate(reqXml);
         } catch (ReqPayValidationException e) {
-            System.out.println("[IMPS] ReqPay from Switch – validation failed: " + e.getMessage());
+            log.warn("[IMPS] ReqPay from Switch – validation failed: {}", e.getMessage());
             String errMsg = e.getRuleIds().isEmpty() ? e.getMessage() : (e.getRuleIds().get(0) + ": " + (e.getMessages().isEmpty() ? e.getMessage() : e.getMessages().get(0)));
             com.hitachi.imps.entity.TransactionEntity txnFail = transactionService.createRequest(txnId, reqXml);
             String errResp = ackService.buildFailureRespPay(xmlParsingService.extractMsgId(reqXml), "96", errMsg);
@@ -217,15 +217,13 @@ public class ReqPayService {
         if (iso.hasField(13)) txn.setDe13(iso.getString(13));
         transactionService.markIsoSent(txn);
 
-        System.out.println("========== [IMPS] IMPS → NPCI | REQ sent | ReqPay (XML) ==========");
-        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
-        System.out.println("  REQ sent to: NPCI | TxnId: " + txnId);
+        log.info("[IMPS] IMPS → NPCI | REQ sent | ReqPay | TxnId: {}", txnId);
         String respXml;
         long tNpci = System.currentTimeMillis();
         try {
             respXml = (txnId != null && !txnId.isBlank()) ? npciRestClient.sendReqPay(reqXml, txnId) : npciRestClient.sendReqPay(reqXml);
         } catch (Exception e) {
-            System.err.println("NPCI not available: " + e.getMessage());
+            log.warn("NPCI not available: {}", e.getMessage());
             transactionService.markFailure(txn, null);
             return null;
         }
@@ -234,12 +232,7 @@ public class ReqPayService {
             return null;
         }
         long npciRoundtripMs = System.currentTimeMillis() - tNpci;
-        System.out.println("========== [IMPS] NPCI → IMPS | RESP received | RespPay (XML) ==========");
-        System.out.println("  IMPS API: " + impsServerDisplay.getBaseUrl());
-        System.out.println("  RESP received from: NPCI | TxnId: " + txnId + " | connection will close");
-        System.out.println("========= PERFORMANCE =========");
-        System.out.println("NPCI Roundtrip: " + npciRoundtripMs + "ms");
-        System.out.println("===============================");
+        log.info("[IMPS] NPCI → IMPS | RESP received | RespPay | TxnId: {} | Roundtrip: {}ms", txnId, npciRoundtripMs);
         auditService.saveRaw(txnId, "NPCI_RESPPAY_XML_IN", respXml);
         try {
             ISOMsg respIso = xmlToIsoConverter.convertRespPay(respXml);
@@ -247,10 +240,10 @@ public class ReqPayService {
             transactionService.markSuccess(txn, respXml, approvalNum, null);
             byte[] respBytes = IsoUtil.pack(respIso);
             auditService.saveRawBytesWithParsed(txnId, "SWITCH_RESPPAY_ISO_OUT", respBytes);
-            System.out.println("[IMPS] ReqPay complete: transaction + message_audit_log updated");
+            log.debug("[IMPS] ReqPay complete: transaction + message_audit_log updated");
             return respBytes;
         } catch (Exception e) {
-            System.err.println("IMPS: RespPay XML to ISO failed: " + e.getMessage());
+            log.warn("IMPS: RespPay XML to ISO failed: {}", e.getMessage());
             transactionService.markFailure(txn, respXml);
             return null;
         }

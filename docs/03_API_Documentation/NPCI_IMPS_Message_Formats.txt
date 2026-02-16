@@ -1,7 +1,7 @@
 NPCI IMPS Message Formats (Reference)
 
 
-This document is the authoritative format for IMPS API request/response bodies. All bodies in SOCKET_GUIDE.md, IMPS_Req_API_Bodies.md, the Postman collection, and the project code must follow these structures.
+This document is the authoritative format for IMPS API request/response bodies. All bodies in SOCKET_GUIDE.txt, IMPS_Req_API_Bodies.txt, the Postman collection, and the project code must follow these structures.
 
 ---
 
@@ -525,4 +525,4 @@ RespValAdd – Name Enquiry Response
 
 ---
 
-*Source: NPCI IMPS specification. Use these formats only for API bodies in this project. SOCKET_GUIDE.md and project code must follow these structures.*
+*Source: NPCI IMPS specification. Use these formats only for API bodies in this project. SOCKET_GUIDE.txt and project code must follow these structures.*

@@ -1,0 +1,24 @@
+# IMPS – Error Code Mapping
+
+## HTTP Status
+
+| Status | Cause |
+|--------|-------|
+| 200 | Success (ACK or response body) |
+| 400 | Validation failure (DuplicateTxnId, ReqPayValidation, CommonCode) |
+| 500 | Internal error |
+
+## ISO 8583 DE39
+
+| DE39 | Meaning |
+|------|---------|
+| 00 | Success |
+| 96 | System malfunction / validation failure |
+
+## Common Exceptions
+
+| Exception | When |
+|-----------|------|
+| DuplicateTxnIdException | txnId already exists |
+| ReqPayValidationException | ReqPay validation failed |
+| CommonCodeValidationException | Head/Txn validation failed |

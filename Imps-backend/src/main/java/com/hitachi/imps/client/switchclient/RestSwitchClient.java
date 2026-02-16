@@ -1,5 +1,7 @@
 package com.hitachi.imps.client.switchclient;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.jpos.iso.ISOMsg;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -19,6 +21,8 @@ import com.hitachi.imps.util.IsoUtil;
 @Component
 @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "routing.switch.rest.enabled", havingValue = "true")
 public class RestSwitchClient implements ISwitchClient {
+
+    private static final Logger log = LoggerFactory.getLogger(RestSwitchClient.class);
 
     @Autowired
     private SwitchAddressResolver switchAddressResolver;
@@ -40,7 +44,7 @@ public class RestSwitchClient implements ISwitchClient {
             HttpEntity<byte[]> request = new HttpEntity<>(isoBytes, headers);
             return restTemplate.postForObject(url, request, byte[].class);
         } catch (Exception e) {
-            System.err.println("SWITCH SEND FAILED [" + apiType + "/" + txnId + "]: " + e.getMessage());
+            log.warn("SWITCH SEND FAILED [{}/{}]: {}", apiType, txnId, e.getMessage());
             return null;
         }
     }
