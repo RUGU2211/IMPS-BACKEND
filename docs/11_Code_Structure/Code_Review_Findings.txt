@@ -61,7 +61,7 @@ This document summarizes findings against the requested review criteria, verifie
 | HTTPS/TLS | OK | TLS supported for socket and REST (ssl profile); configurable. |
 | Passwords hashed | N/A | Application-level user passwords not used; DB and keystore passwords are configuration. |
 | Auth & authorization | N/A | No REST auth in current scope; socket is TLS/mTLS. |
-| CORS | **Consider** | Not explicitly configured in reviewed files. If frontend calls these APIs, configure CORS. |
+| CORS | N/A | Not used in this project. |
 
 **Recommendation:** Document production credential handling in deployment guide; consider masking sensitive fields in logs for production.
 
@@ -166,7 +166,7 @@ This document summarizes findings against the requested review criteria, verifie
 3. **Empty catch blocks:** Add `log.debug("...", e)` in: mock_npci NpciSocketServer (IOException x2, InterruptedException), mock_switch SwitchSocketServer (ISOException).
 4. **Logging:** Replace `System.out.println` with slf4j logger in TransactionValidationService and AsyncConfig.
 5. **Testing:** Add unit tests for ReqPay, RespPay, validation, converters; aim for >70% coverage on business logic.
-6. **Optional:** Add Swagger/OpenAPI, CORS if needed, retry for external calls.
+6. **Optional:** Add Swagger/OpenAPI, retry for external calls.
 
 ---
 

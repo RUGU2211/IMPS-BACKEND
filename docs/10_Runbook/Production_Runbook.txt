@@ -19,7 +19,6 @@ Console output. Log levels from LOGGING_LEVEL_* in .env (prod: INFO).
 
 ## Health Check
 
-- REST: https://localhost:8443/actuator/health
 - ReqHbt: https://localhost:8443/imps/reqhbt/{txnId}
 - Heartbeat: IMPS pings switch every 3 min; check logs for UP/DOWN banks
 

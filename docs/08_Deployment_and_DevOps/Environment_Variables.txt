@@ -60,9 +60,6 @@ IMPS Switch fallback:
   IMPS_SWITCH_DEFAULT_HOST
   IMPS_SWITCH_DEFAULT_PORT
 
-CORS (comma-separated):
-  CORS_ALLOWED_ORIGINS     http://localhost:3000,https://frontend.com
-
 --------------------------------------------------------------------------------
 2. MOCK_NPCI (.env in mock_npci/)
 --------------------------------------------------------------------------------
@@ -97,7 +94,6 @@ CORS (comma-separated):
 - Set SPRING_DATASOURCE_PASSWORD (required; no default in prod)
 - Use strong passwords for SSL_KEY_STORE_PASSWORD, SSL_TRUST_STORE_PASSWORD
 - Set actual NPCI and Switch hosts/URLs (not localhost)
-- Set CORS_ALLOWED_ORIGINS to real frontend origins
 - Prefer secrets manager (Vault, AWS Secrets Manager) for production
 
 ================================================================================

@@ -41,11 +41,6 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-actuator</artifactId>
-		</dependency>
-		
 		<!-- Jackson JSON (required for ObjectMapper) -->
 		<dependency>
 		    <groupId>com.fasterxml.jackson.core</groupId>

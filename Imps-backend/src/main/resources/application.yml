@@ -49,16 +49,6 @@
 server:
   port: ${SERVER_PORT:8081}
 
-# Actuator: health endpoint for load balancers / K8s
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
-  endpoint:
-    health:
-      show-details: when-authorized
-
 spring:
   application:
     name: Imps-backend
