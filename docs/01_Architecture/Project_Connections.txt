@@ -3,7 +3,39 @@ Project Connections
 
 Two databases: imps_db (IMPS Backend) and switch_db (Mock Switch).
 
-Connection Flow: Switch → IMPS → NPCI (REST / HTTP)
+
+Request Flow: NPCI → IMPS → Switch (three connections) – AS IMPLEMENTED
+--------------------------------------------------------------------------------
+When a request is originated by NPCI (e.g. ReqPay, ReqChkTxn, ReqValAdd, ReqHbt, ReqListAccPvd), three logical connections are used. Below matches the current codebase (Imps-backend, mock_switch, mock_npci).
+
+Connection 1: NPCI → IMPS (request leg) — IMPLEMENTED AS DOCUMENTED
+  - NPCI opens connection to IMPS (HTTP 8081/8443 or Socket 9083/9443).
+  - NPCI sends Req (XML): [4 bytes length][XML] on socket, or POST /imps/reqpay/{txnId} etc. on REST.
+  - IMPS receives Req. Stages: validate txnId/msgId, audit (message_audit_log: NPCI_*_XML_IN), create transaction (INIT), send ACK (XML) on same connection.
+  - NPCI receives ACK on same connection, then closes connection.
+  - Connection 1 closed. IMPS continues processing asynchronously.
+  - Code: NpciSocketServer (socket: send ACK then continue; compliant-flow=true: no Resp on this connection). ImpsController (REST: return ACK as response body).
+
+Connection 2: IMPS → Switch (request + response on same connection) — IMPLEMENTED
+  - IMPS opens connection to Switch (HTTP 8082/8444 or Socket 9084/9444). Stages: convert XML→ISO (XmlToIsoConverter), resolve route (institution_master), mark transaction ISO_SENT.
+  - IMPS sends Req (ISO): [4 bytes][ISO] on socket, or POST to Switch with octet-stream.
+  - Switch receives Req. Current implementation: Switch builds response (e.g. RespPay 0210) and sends one Resp (ISO) on same connection (no separate ACK message).
+  - IMPS receives Resp (ISO) on same connection. Stages: convert ISO→XML, update transaction (markSuccess/markFailure), audit (SWITCH_*_ISO_OUT, SWITCH_*_ISO_IN, NPCI_*_XML_OUT). Connection closes.
+  - Code: SocketSwitchClient (send one Req, read one response). mock_switch SwitchSocketServer (receive Req, send one Resp ISO on same socket). REST: IMPS POSTs Req; Switch may respond sync or async (callback to IMPS /imps/resppay/{txnId} etc.).
+
+Connection 3: IMPS → NPCI (response leg, new connection) — IMPLEMENTED AS DOCUMENTED
+  - IMPS opens NEW connection to NPCI (HTTP 8083/8445 or Socket 9085/9445). Format: [4 bytes][XML] on socket, or POST Resp XML on REST.
+  - IMPS sends Resp (XML) to NPCI.
+  - NPCI receives Resp, sends ACK (XML) on same connection.
+  - IMPS receives ACK, then closes connection.
+  - Connection 3 closed.
+  - Code: NpciSocketClient (open socket, send Resp, read ACK, close). NpciRestClient for REST.
+
+Summary (as implemented): CONN 1 = NPCI→IMPS Req, IMPS→NPCI ACK, close. CONN 2 = IMPS→Switch Req, Switch→IMPS Resp (single message), close. CONN 3 = IMPS→NPCI Resp, NPCI→IMPS ACK, close.
+Note: IMPS_Flow_Chart.txt "8-step ACK flow" describes optional explicit ACKs on Connection 2 (Switch→IMPS ACK, IMPS→Switch ACK); the current implementation uses a single response message on Conn 2.
+
+
+Connection Flow: Switch → IMPS → NPCI (reverse / REST / HTTP)
 ----------------------------------------------------
 When a request goes Switch → IMPS → NPCI (e.g. ReqPay from client as Switch via Switch proxy), three logical connections are involved.
 

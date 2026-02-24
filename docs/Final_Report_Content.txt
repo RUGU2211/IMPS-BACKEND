@@ -1,0 +1,131 @@
+# Final Report Content – IMPS Backend (Hitachi Internship)
+## Full project details – no phase-wise split; no page numbers (add as needed)
+
+---
+
+## ABSTRACT
+
+This report presents the design and implementation of the IMPS (Immediate Payment Service) Backend, a middleware developed during an internship at Hitachi. The system sits between the National Payments Corporation of India (NPCI) and the Bank Switch, enabling real-time inter-bank fund transfers by translating between NPCI’s XML-based messages and the Switch’s ISO 8583 format. The backend supports both REST (HTTP/HTTPS) and TCP Socket (plain and TLS) transport on all links, implements NPCI-compliant ACK-first socket behaviour, and provides institution-based routing, validation, duplicate detection, and full audit logging in PostgreSQL. It handles the complete request flow (NPCI → IMPS → Switch) and the reverse flow (Switch → IMPS → NPCI), as well as the Switch-to-IMPS callback for asynchronous responses. The project includes the Imps-backend application, Mock Switch and Mock NPCI for testing, two PostgreSQL databases (imps_db and switch_db), and comprehensive documentation. Technologies used include Java 17, Spring Boot 3.3, Maven, PostgreSQL, and jPOS for ISO 8583 handling.
+
+---
+
+## Chapter 1: INTRODUCTION
+
+### 1.1 About the company
+
+Hitachi is a global technology company with a strong focus on Social Innovation Business, combining Operational Technology (OT) and Information Technology (IT) to deliver solutions across mobility, energy, industry, and finance. In India, Hitachi operates in areas such as digital payments, railways, power systems, and IT services. The internship was undertaken in the domain of payment systems, specifically the IMPS ecosystem regulated by the National Payments Corporation of India (NPCI). Working with Hitachi provided exposure to enterprise-grade development practices, financial messaging standards (ISO 8583, NPCI XML), and secure, auditable transaction handling expected in banking and payment infrastructure.
+
+### 1.2 Overview
+
+IMPS (Immediate Payment Service) allows real-time, 24×7 inter-bank fund transfers in India. NPCI operates the IMPS network and defines message formats (XML) and connection behaviour for participants. Banks and payment service providers use an internal Switch that speaks ISO 8583. The IMPS Backend developed in this project acts as middleware between NPCI and the Bank Switch: it accepts requests from NPCI in XML over REST or TCP Socket, converts them to ISO 8583, forwards them to the Switch, and converts Switch responses back to XML for delivery to NPCI. It also accepts requests from the Switch (reverse flow) and converts them to XML for NPCI, and receives response callbacks from the Switch (e.g. POST /imps/resppay/{txnId}) when the Switch responds asynchronously. The system performs validation, routing by institution (IFSC/orgId), duplicate transaction detection, and end-to-end audit logging. The implementation supports dual transport (REST and Socket) on every interface, optional SSL/TLS, and NPCI-compliant socket flow (ACK on same connection then close; response on a new connection). A periodic heartbeat mechanism (every 3 minutes) checks Switch connectivity and updates institution_master. The project comprises the Imps-backend application, Mock Switch (ISO 8583, switch_db), and Mock NPCI (XML, stateless) for integration testing.
+
+**[Diagram suggestion: Insert system context or high-level architecture diagram – e.g. docs/diagrams/IMPS_Flow_Chart_Diagram.png or FULL_PROJECT_ARCHITECTURE.png.]**
+
+---
+
+## Chapter 2: PROJECT DETAILS
+
+### 2.1 Project Aim
+
+The aim of the project was to design and implement the complete IMPS Backend that: (1) receives payment and related requests from NPCI in XML over REST or TCP Socket, validates and acknowledges them promptly (ACK on the same connection for socket mode), converts XML to ISO 8583, routes requests to the appropriate Bank Switch by institution (IFSC/orgId), receives Switch responses (sync on same connection or async via callback), converts them to XML, updates transaction state, and delivers responses to NPCI; (2) supports the reverse flow where the Switch sends requests to IMPS, IMPS converts to XML and forwards to NPCI, and returns the NPCI response as ISO to the Switch; (3) accepts Switch response callbacks (e.g. RespPay, RespChkTxn) via REST or Socket and updates transactions and delivers to NPCI; (4) maintains a complete audit trail (message_audit_log) and transaction lifecycle (INIT → ISO_SENT → SUCCESS/FAILED) in PostgreSQL; and (5) supports heartbeat (ReqHbt/RespHbt) and periodic Switch connectivity checks. The implementation supports both REST and Socket transport on all interfaces and complies with NPCI socket behaviour (ACK-then-close on the request connection; response on a new connection).
+
+### 2.2 Project Scope
+
+The project scope covers the full IMPS Backend and its integration points:
+
+**Message types and APIs**
+- Request/response pairs: ReqPay/RespPay, ReqChkTxn/RespChkTxn, ReqHbt/RespHbt, ReqListAccPvd/RespListAccPvd, ReqValAdd/RespValAdd. All exposed under /imps (e.g. /imps/reqpay/{txnId}, /imps/resppay/{txnId}). NPCI sends XML; Switch sends or receives ISO 8583. Content-Type distinguishes XML (application/xml) vs ISO (application/octet-stream).
+
+**Entry points**
+- REST: ImpsController and NpciController – POST /imps/{reqtype|resptype}/{txnId} for NPCI (XML) and Switch (ISO). All paths under /imps; no separate /switch path.
+- Socket: NpciSocketServer on 9083 (TCP) / 9443 (TLS) – receives [4-byte length][XML] from NPCI; SwitchSocketServer on 9086 (TCP) / 9446 (TLS) – receives [4-byte length][ISO] from Switch (reverse flow and callback).
+
+**Connection flows**
+- Request flow (NPCI-originated): Connection 1 – NPCI → IMPS (Req XML), IMPS → NPCI (ACK), connection close. Connection 2 – IMPS → Switch (Req ISO), Switch → IMPS (Resp ISO), connection close. Connection 3 – IMPS → NPCI (new connection, Resp XML), NPCI → IMPS (ACK), connection close.
+- Reverse flow (Switch-originated): Switch → IMPS (Req ISO), IMPS → NPCI (Req XML), NPCI → IMPS (Resp XML), IMPS → Switch (Resp ISO) on same connections as applicable.
+- Callback flow: Switch sends Resp (ISO) to IMPS via POST /imps/resppay/{txnId} (or respchktxn, resphbt, etc.) or via socket; IMPS converts to XML, updates transaction, and sends to NPCI (REST or new socket).
+
+**Ports and transport**
+- Imps-backend: HTTP 8081, HTTPS 8443 (ssl profile); Socket TCP 9083, Socket TLS 9443 (NPCI); Socket TCP 9086, Socket TLS 9446 (Switch reverse/callback). mock_switch: HTTP 8082, HTTPS 8444; Socket 9084, TLS 9444. mock_npci: HTTP 8083, HTTPS 8445; Socket 9085, TLS 9445. IMPS connects outbound to Switch (9084/9444) and to NPCI (9085/9445) for response delivery.
+
+**Routing and configuration**
+- Institution-based routing via institution_master (switch_ip, switch_port for socket; REST base URL when routing.switch.rest.enabled). SwitchAddressResolver resolves by request_org_id/IFSC. Configuration via application.yml and .env (socket.*, npci.compliant-flow, npci.socket.*, routing.switch.socket.*, routing.switch.rest.*).
+
+**Persistence and audit**
+- imps_db (PostgreSQL): transaction (txn_id, switch_status INIT/ISO_SENT/SUCCESS/FAILED, req/resp timestamps, resp_xml); message_audit_log (txn_id, stage, raw message – NPCI_*_XML_IN, SWITCH_*_ISO_OUT, SWITCH_*_ISO_IN, NPCI_*_XML_OUT); institution_master (IFSC, switch address, active, spoc details); account_type_mapping, xml_path_req_pay, response_xpath. Only Imps-backend writes to transaction and message_audit_log. switch_db (PostgreSQL): account_master, used by mock_switch for ReqPay debit/credit and ValAdd name enquiry.
+
+**Heartbeat**
+- Periodic (e.g. every 3 min): IMPS TCP pings each bank switch, updates institution_master.active; console shows UP/DOWN with spoc/email/phone/url. Manual ReqHbt from NPCI or Switch triggers full flow with DB check and logging.
+
+**Supporting components**
+- Mock Switch (ISO 8583, HTTP 8082/8444, Socket 9084/9444, switch_db) – receives Req from IMPS, returns Resp; can callback IMPS at /imps/resppay/{txnId} etc. in REST mode. Mock NPCI (XML, HTTP 8083/8445, Socket 9085/9445, stateless) – receives Resp from IMPS, returns ACK.
+
+**[Diagram suggestion: Insert project connections or three-connection request flow diagram – e.g. docs/diagrams/Project_Connections_Request_Flow_Diagram.png.]**
+
+### 2.3 Project Methodology
+
+The project followed an iterative development approach:
+
+1. **Requirements and design:** Analysis of NPCI message formats, ISO 8583 usage, and connection flows; high-level design (HLD) and low-level design (LLD); definition of three logical connections (NPCI→IMPS, IMPS→Switch, IMPS→NPCI), ACK behaviour, reverse flow, and callback flow.
+2. **Implementation:** Spring Boot application with clear layering. Entry points: ImpsController, NpciController (REST); NpciSocketServer (9083/9443), SwitchSocketServer (9086/9446). Orchestration: ImpsInboundService (extract msgId/txnId, validate, send ACK, dispatch to Req* services). Processing: ReqPayService, ReqChkTxnService, ReqHbtService, ReqValAddService, ReqListAccPvdService; RespPayService, RespChkTxnService, etc.; XmlToIsoConverter, IsoToXmlConverter; SwitchAddressResolver (institution_master); ISwitchClient (RestSwitchClient, SocketSwitchClient), NpciRestClient, NpciSocketClient, PendingSocketResponseStore. Persistence: TransactionService (createRequest, markIsoSent, markSuccess, markFailure), MessageAuditService (saveRaw per stage). Exception handling: GlobalExceptionHandler, custom exceptions (e.g. DuplicateTxnIdException, ReqPayValidationException). Config: application.yml, profiles (default, prod, ssl, docker), .env.
+3. **Testing:** Unit and integration testing using Mock Switch and Mock NPCI; Postman collections for REST APIs; socket testing (TCP and TLS) per project socket guide; validation of ACK-first flow, three-connection behaviour, reverse flow, and callback flow.
+4. **Documentation:** Architecture (HLD, Project Connections, IMPS Flow Chart), LLD, API documentation, database schema, integration (SOCKET_GUIDE), security, configuration, deployment, runbook, code structure – all in docs folder.
+
+**[Diagram suggestion: Optional – full project/internal architecture diagram – e.g. docs/diagrams/FULL_PROJECT_ARCHITECTURE.png.]**
+
+### 2.4 Project Timeline
+
+The project was executed over the internship period. Development included: requirements and HLD/LLD; implementation of REST and Socket entry points for NPCI and Switch; implementation of request flow (NPCI → IMPS → Switch) and response delivery (IMPS → NPCI); implementation of reverse flow (Switch → IMPS → NPCI) and Switch-to-IMPS callback handling; converters, routing, persistence, and audit; heartbeat and Switch connectivity check; SSL/TLS support; Mock Switch and Mock NPCI; and documentation and testing. Deliverables: working Imps-backend with all flows, transaction and message_audit_log persistence, full documentation in docs/, Postman collection, and SQL schemas (imps_full_schema.sql, switch_full_schema.sql).
+
+### 2.5 Technologies used
+
+| Layer            | Technology                                  |
+|------------------|---------------------------------------------|
+| Runtime          | Java 17                                     |
+| Framework        | Spring Boot 3.3.5                           |
+| Build            | Maven 3.6+                                  |
+| Database         | PostgreSQL (imps_db, switch_db)              |
+| Persistence      | Spring Data JPA (Hibernate)                 |
+| Message formats  | NPCI XML, ISO 8583 (jPOS 2.1.7)             |
+| Transport        | REST (HTTP/HTTPS), TCP Socket (plain/TLS)   |
+| Configuration    | application.yml, .env (per project)         |
+| Testing / tools  | Postman, Mock Switch, Mock NPCI             |
+
+Key libraries: Lombok, Jackson, PostgreSQL driver, jPOS for ISO 8583 pack/unpack, Spring RestTemplate, standard Java Socket and SSLSocket. SSL/TLS via keystore/truststore configuration for HTTPS (8443, 8444, 8445) and TLS sockets (9443, 9444, 9445, 9446). Certificates can be generated via project certs/generate-certs.bat.
+
+### 2.6 Future Scope
+
+Possible enhancements: additional message types or NPCI spec updates; performance and load testing; enhanced monitoring (health, latency, error rates) and alerting; multi-region or high-availability deployment; extended observability (metrics, distributed tracing). Production go-live would involve UAT with bank/NPCI integration, security review, runbooks, and operational handover.
+
+---
+
+## Chapter 3: CONCLUSION
+
+### 3.1 Learnings
+
+Technical: Hands-on experience with Spring Boot (REST APIs, async processing, profiles, configuration), financial messaging (NPCI XML and ISO 8583 via jPOS), TCP Socket programming (length-prefixed framing, TLS, server and client roles), and JPA-based persistence (transaction and audit design). Understanding of institution-based routing, duplicate transaction handling, reverse and callback flows, and structured exception handling in a payment context. Process and tools: Importance of clear documentation (HLD, LLD, API, flows), use of mock services and Postman for integration testing, and version control and project structure in a multi-module codebase (Imps-backend, mock_switch, mock_npci).
+
+### 3.2 Conclusion
+
+The IMPS Backend project successfully delivered a complete middleware that bridges NPCI (XML) and the Bank Switch (ISO 8583). It supports the full request flow (NPCI → IMPS → Switch) with three logical connections and ACK-then-close behaviour, the reverse flow (Switch → IMPS → NPCI), and the Switch-to-IMPS callback for asynchronous responses. REST and TCP Socket (with optional TLS) are supported on all interfaces. The system provides institution-based routing, validation, duplicate detection, transaction state management (INIT → ISO_SENT → SUCCESS/FAILED), and full message audit in PostgreSQL. Heartbeat and Switch connectivity checks are included. The implementation is documented and tested with Mock Switch and Mock NPCI. The internship provided valuable exposure to payment systems, enterprise development practices, and the Hitachi work environment.
+
+---
+
+## Chapter 4: REFERENCES
+
+1. NPCI IMPS technical specifications (message formats, socket behaviour).
+2. ISO 8583 – Financial transaction card-originated messages (ISO/IEC 8583).
+3. Spring Boot 3.x documentation – https://spring.io/projects/spring-boot
+4. Spring Data JPA reference – https://spring.io/projects/spring-data-jpa
+5. jPOS 2.1.7 – ISO 8583 message handling – https://jpos.org/
+6. Project documentation (E:\Hitachi_Project\docs) – Architecture (HLD, Project Connections, IMPS Flow Chart), LLD, API, Database, Integration, Security, Configuration, Deployment, Runbook, Code Structure.
+7. PostgreSQL documentation – https://www.postgresql.org/docs/
+
+---
+
+## Diagram checklist for the report
+
+- **After Abstract or start of Chapter 1:** System / high-level architecture (NPCI, IMPS, Switch, mock_npci; ports).
+- **Chapter 2 (e.g. after 2.2 or 2.3):** Project connections or three-connection request flow; optional full project architecture.
+
+All diagram images: **E:\Hitachi_Project\docs\diagrams\** (see docs/diagrams/README.txt for filenames).

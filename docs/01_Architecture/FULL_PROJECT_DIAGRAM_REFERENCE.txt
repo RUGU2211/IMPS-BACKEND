@@ -1,0 +1,42 @@
+# IMPS Backend – Full Project Diagram (Reference)
+
+## Diagram file
+
+**Location:** All diagram images are kept under **docs/diagrams/** (e.g. E:\Hitachi_Project\docs\diagrams\). Full project diagram: docs/diagrams/FULL_PROJECT_ARCHITECTURE.png (or equivalent). See [docs/diagrams/README.txt](../diagrams/README.txt).
+
+The single consolidated diagram image is saved in the project for PPT/docs use.
+
+---
+
+## What the full diagram shows
+
+### 1. System context (top)
+- **NPCI** (XML): Ports 8081/8443 (REST), 9083/9443 (Socket). Sends Req, receives ACK (Conn 1) and Resp (Conn 3).
+- **IMPS Backend** (center): XML ↔ ISO 8583; Java 17, Spring Boot 3.3, Maven.
+- **mock_switch** (ISO 8583): Ports 8082/8444, 9084/9444. switch_db. Receives Req (ISO), sends Resp (ISO).
+- **mock_npci** (XML): Ports 8083/8445, 9085/9445. Stateless. Receives Resp, sends ACK.
+- **Reverse flow:** Switch → IMPS on 9086/9446 (Socket).
+
+### 2. Three connections – request flow (NPCI-originated)
+- **Conn 1:** NPCI → IMPS: Req (XML). IMPS: validate, audit (NPCI_*_XML_IN), create txn (INIT), send ACK. NPCI closes.
+- **Conn 2:** IMPS → Switch: XML→ISO, route (institution_master), send Req (ISO). Switch: build Resp (e.g. 0210), send Resp (ISO). IMPS: ISO→XML, markSuccess/markFailure, audit. Close.
+- **Conn 3:** IMPS → NPCI (new connection): send Resp (XML). NPCI: send ACK. IMPS closes.
+
+### 3. IMPS internal architecture
+- **Entry:** ImpsController (/imps), NpciController (/npci); NpciSocketServer (9083/9443); SwitchSocketServer (9086/9446).
+- **Orchestration:** ImpsInboundService (validate txnId/msgId, send ACK, dispatch to Req* services).
+- **Processing:** Req* / Resp* services; XmlToIsoConverter, IsoToXmlConverter; SwitchAddressResolver, ISwitchClient (REST/Socket), NpciRestClient, NpciSocketClient, PendingSocketResponseStore.
+- **Persistence:** TransactionService, MessageAuditService; tables transaction, message_audit_log (imps_db).
+
+### 4. Databases and transaction state
+- **imps_db:** transaction, message_audit_log, institution_master, account_type_mapping, xml_path_req_pay, response_xpath.
+- **switch_db:** account_master.
+- **State:** INIT → ISO_SENT → SUCCESS | FAILED.
+
+---
+
+## Related docs
+
+- [IMPS_Flow_Chart.txt](IMPS_Flow_Chart.txt) – Flows, ACK, HTTP, transaction status.
+- [Project_Connections.txt](Project_Connections.txt) – Ports, connections, DB, config.
+- [HLD_System_Architecture.txt](HLD_System_Architecture.txt) – HLD overview.
